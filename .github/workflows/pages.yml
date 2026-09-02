@@ -57,11 +57,11 @@ jobs:
           touch site/.nojekyll
           du -sh site
 
+      # Разовое действие руками: Settings -> Pages -> Build and deployment ->
+      # Source: GitHub Actions. Автоматическое включение (enablement: true)
+      # здесь не работает — встроенному GITHUB_TOKEN не хватает прав, нужен
+      # персональный токен с администрированием репозитория.
       - uses: actions/configure-pages@v5
-        with:
-          # Включает Pages в настройках репозитория, если они ещё не включены,
-          # чтобы не ходить руками в Settings -> Pages -> Source: GitHub Actions.
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:

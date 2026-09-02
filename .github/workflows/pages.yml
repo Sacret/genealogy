@@ -1,0 +1,78 @@
+# Публикация журнала на GitHub Pages -> https://sacret.github.io/genealogy/
+#
+# Сайт НЕ пересобирается здесь: journal.html берётся готовым из репозитория.
+# Причина в иконке — icon.py рисует ять шрифтом Georgia Bold из
+# /System/Library/Fonts, которого на ubuntu-раннере нет. Сборка в CI прошла бы
+# без ошибки (журнал ловит исключение и обходится без иконки), но тихо отдала
+# бы страницу без знака в заголовке и без favicon.
+#
+# Значит journal.html надо коммитить после поисков — он пересобирается сам
+# при каждом вызове find.py, достаточно не забыть про git add.
+
+name: Журнал на Pages
+
+on:
+  push:
+    branches: [master]
+    # Гонять деплой из-за правки в fetch.py незачем.
+    paths:
+      - journal.html
+      - favicon.ico
+      - "*/crops/**"
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Параллельные деплои Pages конфликтуют; лишние запуски ждут, а не отменяются:
+# отменённый на середине оставил бы сайт в промежуточном состоянии.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Собрать сайт
+        run: |
+          set -eu
+          mkdir -p site
+          cp journal.html site/index.html
+          [ -f favicon.ico ] && cp favicon.ico site/ || true
+          # Вырезки находок вшиты в страницу как data:URI, но под каждой стоит
+          # ссылка «полный размер» на файл рядом — без этих папок она ведёт в 404.
+          find . -type d -path './bv*/crops' -print0 | while IFS= read -r -d '' d; do
+            mkdir -p "site/${d#./}"
+            cp "$d"/* "site/${d#./}/"
+          done
+          # На случай, если публикацию когда-нибудь переключат на ветку:
+          # Jekyll молча выбрасывает файлы, чьё имя начинается с подчёркивания,
+          # а в crops/ лежит _образец.png.
+          touch site/.nojekyll
+          du -sh site
+
+      - uses: actions/configure-pages@v5
+        with:
+          # Включает Pages в настройках репозитория, если они ещё не включены,
+          # чтобы не ходить руками в Settings -> Pages -> Source: GitHub Actions.
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

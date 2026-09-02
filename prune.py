@@ -8,7 +8,7 @@
   * страницы со всеми когда-либо залогированными кандидатами — не только
     подтверждёнными: отсеявшийся кандидат тоже может понадобиться
     перепроверить;
-  * страницы, названные в вердиктах;
+  * страницы находок, названные вердиктом (`find.py --pages`);
   * вырезки в crops/ — они крошечные и служат доказательством находки
     даже если документ уйдёт из библиотеки.
 
@@ -21,48 +21,67 @@ import shutil
 import subprocess
 import sys
 
-from docstore import doc_dir, load_meta, read_log, save_meta
+from docstore import doc_dir, latest_verdicts, load_meta, read_log, save_meta
+
+
+# Ссылка на другой документ: "тот же человек, что в bv0000386 стр. 208".
+# Такой номер принадлежит соседнему тому, но существует и в этом, так что
+# обрезкой по объёму его не отсечь — нужно смотреть, что стоит перед ним.
+CROSS_REF = re.compile(r"bv\d{7}[^.;]{0,60}?стр\.?\s*[\d/]+", re.I)
+PAGE_REF = re.compile(r"стр\.?\s*([\d/]+)", re.I)
+
+
+def _numbers(text: str, total=None) -> list:
+    """Номера страниц этого тома, названные в тексте вердикта."""
+    out = []
+    for run in PAGE_REF.findall(CROSS_REF.sub(" ", text)):
+        out += [int(x) for x in run.split("/") if x]   # 'стр. 280/404/485'
+    if total:
+        out = [p for p in out if 1 <= p <= total]
+    return out
+
+
+def confirmed_pages(rec: dict, total=None) -> list:
+    """Страницы, где фамилия действительно стоит.
+
+    Из поля `confirmed`, куда их кладёт `find.py --pages`. Для вердиктов,
+    записанных до появления поля, остаётся разбор текста — он и был
+    причиной ошибки: в тексте называются и отклонённые кандидаты, и
+    находки в соседних томах.
+    """
+    if rec.get("confirmed") is not None:
+        pages = [int(p) for p in rec["confirmed"]]
+        return [p for p in pages if not total or 1 <= p <= total]
+    if rec.get("status") == "found":
+        return _numbers(rec.get("verdict", ""), total)
+    return []
 
 
 def pages_to_keep(ident: str) -> set:
-    """Номера страниц, которые нельзя выбрасывать.
-
-    Номера берутся в том числе из текста вердиктов, а там встречаются
-    ссылки на другие документы ("тот же человек, что в bv0000386
-    стр. 208"). Поэтому набор обрезается по числу страниц этого тома —
-    иначе в нём оказываются несуществующие номера.
-    """
+    """Номера страниц, которые нельзя выбрасывать."""
+    total = load_meta(ident).get("pages")
     keep = set()
     for r in read_log(ident):
         for p in r.get("pages_with_hits", []):
             keep.add(int(p))
-        for p in re.findall(r"стр\.?\s*(\d+)", r.get("verdict", ""), re.I):
-            keep.add(int(p))
-        # 'стр. 280/404/485/537' — номера через косую черту
-        for run in re.findall(r"стр\.?\s*([\d/]+)", r.get("verdict", ""), re.I):
-            keep.update(int(x) for x in run.split("/") if x)
-    total = load_meta(ident).get("pages")
-    if total:
-        keep = {p for p in keep if 1 <= p <= total}
+    # Только последние вердикты: перепроверка дописывает строку, и
+    # прежняя не должна удерживать страницу, которую новая уже отвела.
+    for r in latest_verdicts(ident).values():
+        keep.update(confirmed_pages(r, total))
+        # Кроме находки держим и всё, что вердикт называет по имени:
+        # отклонённого кандидата могут захотеть пересмотреть, а страница,
+        # проверенная руками, в pages_with_hits не попадает вовсе.
+        keep.update(_numbers(r.get("verdict", ""), total))
     return keep
 
 
 def confirmed_hits(ident: str):
-    """(фамилия, страница) для вердиктов со статусом 'найдена'.
-
-    Как и в pages_to_keep, номера обрезаются по объёму тома: вердикт
-    может ссылаться на страницу другого документа ("тот же человек, что
-    в bv0000386 стр. 208"), и без обрезки мы полезли бы вырезать
-    несуществующую страницу.
-    """
+    """(фамилия, страница) для вердиктов со статусом 'найдена'."""
     total = load_meta(ident).get("pages")
     out, seen = [], set()
-    for r in read_log(ident):
-        if r.get("type") == "verdict" and r.get("status") == "found":
-            for p in re.findall(r"стр\.?\s*(\d+)", r.get("verdict", ""), re.I):
-                n = int(p)
-                if total and not (1 <= n <= total):
-                    continue
+    for r in latest_verdicts(ident).values():
+        if r.get("status") == "found":
+            for n in confirmed_pages(r, total):
                 if (r["surname"], n) in seen:
                     continue        # вердикт может называть страницу дважды
                 seen.add((r["surname"], n))

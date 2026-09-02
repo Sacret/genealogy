@@ -131,6 +131,17 @@ def read_log(ident: str) -> list:
     return [json.loads(ln) for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
+def latest_verdicts(ident: str) -> dict:
+    """Последний вердикт по каждой фамилии.
+
+    Вердикты дописываются, а не переписываются: перепроверка добавляет
+    строку. Читателя интересует последняя — прежние остаются историей
+    и не должны, например, удерживать от чистки страницы, которые
+    новый вердикт уже отвёл.
+    """
+    return {r["surname"]: r for r in read_log(ident) if r.get("type") == "verdict"}
+
+
 def print_log(ident: str) -> None:
     log = read_log(ident)
     meta = load_meta(ident)

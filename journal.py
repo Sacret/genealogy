@@ -22,11 +22,19 @@ STATUS = {
     "unclear": ("не проверена", "wait"),
 }
 
+# Найденная фамилия ещё не значит найденный предок. Могучевыхъ из одной
+# станицы в приказах несколько семей, и зелёный на всех разом обещает
+# родство там, где его никто не устанавливал. Поэтому находка красится
+# по полю `kin` вердикта: зелёным — только названные там страницы.
+KIN_LABEL  = "найдена, родство подтверждено"
+MAYBE_LABEL = "найдена, родство не установлено"
+
 CSS = """
 :root {
   --bg: #faf8f5; --card: #fff; --ink: #1c1a17; --dim: #6b6560;
   --line: #e3ddd4; --accent: #7a4a2b;
   --ok-bg: #e6f0e4; --ok-ink: #2f5c28;
+  --maybe-bg: #e0eaf3; --maybe-ink: #2c5578;
   --no-bg: #ece9e5; --no-ink: #6b6560;
   --wait-bg: #f7ecd8; --wait-ink: #8a5f18;
 }
@@ -35,6 +43,7 @@ CSS = """
     --bg: #171513; --card: #201d1a; --ink: #ece7e0; --dim: #9a918a;
     --line: #322d28; --accent: #d09a6e;
     --ok-bg: #1f3320; --ok-ink: #9ed095;
+    --maybe-bg: #1b2b39; --maybe-ink: #8fbede;
     --no-bg: #2a2622; --no-ink: #9a918a;
     --wait-bg: #3a2e18; --wait-ink: #e0b463;
   }
@@ -116,6 +125,8 @@ tr.hidden { display: none; }
 .badge { display: inline-block; padding: 2px 9px; border-radius: 20px;
          font-size: 12px; font-weight: 600; white-space: nowrap; }
 .badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+.badge.maybe { background: var(--maybe-bg); color: var(--maybe-ink); }
+.badge.hit { background: var(--ok-bg); color: var(--ok-ink); }
 .badge.no { background: var(--no-bg); color: var(--no-ink); }
 .badge.wait { background: var(--wait-bg); color: var(--wait-ink); }
 .note { color: var(--dim); font-size: 13px; margin-top: 5px; max-width: 62ch; }
@@ -124,7 +135,8 @@ tr.hidden { display: none; }
 .pages a { color: var(--accent); text-decoration: none;
            border-bottom: 1px solid transparent; }
 .pages a:hover { border-bottom-color: var(--accent); }
-.pages a.hit { font-weight: 700; }
+.pages a.hit { font-weight: 700; color: var(--ok-ink); }
+.pages a.maybe { font-weight: 700; color: var(--maybe-ink); }
 
 /* Полоса лет: год с документом кликабелен и окрашен итогом, год без
    документа — пустая клетка. Пробелы в ряду приказов видно сразу, а
@@ -136,6 +148,8 @@ tr.hidden { display: none; }
   border: 1px solid var(--line); background: var(--card); color: var(--dim);
 }
 a.year:hover { border-color: var(--accent); }
+.year.maybe { background: var(--maybe-bg); color: var(--maybe-ink);
+              border-color: transparent; }
 .year.ok { background: var(--ok-bg); color: var(--ok-ink); border-color: transparent;
            font-weight: 600; }
 .year.no { background: var(--no-bg); color: var(--no-ink); border-color: transparent; }
@@ -234,6 +248,31 @@ def doc_year(meta) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def confirmed_pages(r):
+    """Страницы находки и подмножество тех, где родство установлено.
+
+    Для старых вердиктов, записанных без поля `confirmed`, номера всё ещё
+    разбираются из текста — он врёт, но реже, чем пустота на месте находки.
+    Поля `kin` у них нет вовсе, и такая находка честно показывается как
+    «родство не установлено»: молчание — не подтверждение.
+    """
+    if r["status"] != "found":
+        return set(), set()
+    conf = set(r.get("confirmed")
+               or re.findall(r"стр\.?\s*(\d+)", r.get("verdict", ""), re.I))
+    kin = set(r.get("kin") or []) & conf
+    return conf, kin
+
+
+def row_badge(r):
+    """Подпись и цвет итога. Находка расщепляется по установленному родству."""
+    label, cls = STATUS[r["status"]]
+    if r["status"] != "found":
+        return label, cls
+    _, kin = confirmed_pages(r)
+    return (KIN_LABEL, "ok") if kin else (MAYBE_LABEL, "maybe")
+
+
 def crops_for(ident, surname, pages):
     """Вырезки подтверждённых находок: <документ>/crops/pNNNN_основа_N.png.
 
@@ -279,6 +318,11 @@ def thumb_uri(path: pathlib.Path, max_w=620) -> str:
     return "data:image/png;base64," + base64.b64encode(data).decode()
 
 
+# Чем меньше, тем важнее показать: за год могло быть два дела, и полоса
+# должна назвать лучший исход, а не последний по алфавиту.
+RANK = {"ok": 0, "maybe": 1, "wait": 2, "no": 3, "gap": 4}
+
+
 def year_strip(docs) -> str:
     """Сплошной ряд лет от первого до последнего: где документ, где пробел."""
     years = {}
@@ -287,10 +331,12 @@ def year_strip(docs) -> str:
         if y is None:
             continue
         st = {r["status"] for r in d["rows"]}
-        cls = ("ok" if "found" in st else
+        kin = any(confirmed_pages(r)[1] for r in d["rows"])
+        cls = ("ok" if kin else
+               "maybe" if "found" in st else
                "wait" if (not st or "unclear" in st) else "no")
         # Два дела за один год — берём лучший исход: год всё равно проверен.
-        if years.get(y, ("gap",))[0] != "ok":
+        if RANK.get(cls, 9) < RANK.get(years.get(y, ("gap",))[0], 9):
             years[y] = (cls, ident)
     if not years:
         return ""
@@ -309,8 +355,10 @@ def year_strip(docs) -> str:
             "не открывали." if gaps else
             f"{lo}—{hi}: сплошь, без пробелов.")
     return ("<div class=years>" + "".join(cells) + "</div>"
-            f"<p class=years-note>{note} Зелёный — фамилия найдена, "
-            "серый — искали и не нашли, пунктир — дело не смотрели.</p>")
+            f"<p class=years-note>{note} Зелёный — найден человек, чьё "
+            "родство установлено; синий — фамилия найдена, но это "
+            "однофамилец или родство не доказано; серый — искали и не "
+            "нашли, пунктир — дело не смотрели.</p>")
 
 
 def coverage(ident):
@@ -356,7 +404,8 @@ def collect():
             rows.append({**r,
                          "status": (v or {}).get("status", "unclear"),
                          "verdict": (v or {}).get("verdict", ""),
-                         "confirmed": (v or {}).get("confirmed")})
+                         "confirmed": (v or {}).get("confirmed"),
+                         "kin": (v or {}).get("kin")})
         rows.sort(key=lambda r: r["date"])
         if rows or meta:
             docs[ident] = {"meta": meta, "rows": rows,
@@ -445,7 +494,7 @@ def render(docs) -> str:
         rank = {"found": 0, "unclear": 1, "absent": 2}
         chips = []
         for r in sorted(rows, key=lambda r: (rank[r["status"]], r["surname"].lower())):
-            label, cls = STATUS[r["status"]]
+            label, cls = row_badge(r)
             chips.append(f"<span class='badge {cls} sum-badge'>"
                          f"{e(r['surname'])} — {label}</span>")
         word = plural(len(rows), "поиск", "поиска", "поисков")
@@ -455,7 +504,7 @@ def render(docs) -> str:
                    "<th class=num>Кандидатов</th><th>Страницы</th>"
                    "<th>Итог</th></tr></thead><tbody>")
         for r in rows:
-            label, cls = STATUS[r["status"]]
+            label, cls = row_badge(r)
             pages = r.get("pages_with_hits") or []
             # Страницы с подтверждённой находкой выделены жирным, и только
             # к ним журнал подставляет вырезку. Берутся они из поля
@@ -465,14 +514,11 @@ def render(docs) -> str:
             # на стр. 336 попадал в журнал как найденный Могучевъ.
             # Для старых вердиктов, записанных без поля, остаётся разбор
             # текста: он врёт, но реже, чем пустота на месте находки.
-            confirmed = set()
-            if r["status"] == "found":
-                confirmed = set(r.get("confirmed")
-                                or re.findall(r"стр\.?\s*(\d+)",
-                                              r.get("verdict", ""), re.I))
+            confirmed, kin = confirmed_pages(r)
             links = []
             for p in pages:
-                cl = " class=hit" if p in confirmed else ""
+                cl = (" class=hit" if p in kin else
+                      " class=maybe" if p in confirmed else "")
                 links.append(f"<a{cl} href='{e(url)}/view/?#page={e(p)}' "
                              f"target=_blank>{e(p)}</a>")
             key = " ".join([r["surname"], title, ident, *pages]).lower()
@@ -484,10 +530,14 @@ def render(docs) -> str:
             note = (f"<div class=note>{e(r['verdict'])}</div>" if r["verdict"] else "")
             shots = ""
             for page, f in crops_for(ident, r["surname"], confirmed):
+                who = ("родство подтверждено" if str(page) in kin
+                       else "родство не установлено")
+                mark_cls = "hit" if str(page) in kin else "maybe"
                 shots += (f"<div class=crop><img alt='{e(r['surname'])}, "
                           f"стр. {page}' src='{thumb_uri(f)}'>"
                           f"<div class=cap>стр. {page} — вырезка из скана, "
                           f"<a href='{e(f.relative_to(ROOT))}'>полный размер</a>"
+                          f" · <span class='badge {mark_cls}'>{who}</span>"
                           "</div></div>")
             out.append(f"<td><span class='badge {cls}'>{label}</span>{note}{shots}</td>")
             out.append("</tr>")

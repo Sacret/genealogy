@@ -79,6 +79,10 @@ def main():
     ap.add_argument("--pages", help="страницы, где фамилия подтверждена глазами, "
                                     "через запятую: '223'. Только эти журнал "
                                     "выделяет и снабжает вырезкой")
+    ap.add_argument("--kin", help="страницы из --pages, где найден человек с "
+                                  "установленным родством, а не однофамилец. "
+                                  "Их журнал красит зелёным, остальные находки "
+                                  "— синим «родство не установлено»")
     a = ap.parse_args()
 
     if a.verdict and a.surname:
@@ -92,7 +96,14 @@ def main():
         if a.status == "found" and not pages:
             sys.exit("--status found без --pages: назовите страницы находки, "
                      "иначе журнал возьмёт номера из текста вердикта")
-        add_verdict(a.ident, a.surname, a.verdict, a.status, pages)
+        kin = re.findall(r"\d+", a.kin) if a.kin else None
+        # Однофамилец, покрашенный как родственник, — ошибка молчаливая:
+        # в журнале он выглядит доказанным. Поэтому родство называется
+        # только страницами, уже подтверждёнными глазами.
+        if kin and not set(kin) <= set(pages or []):
+            sys.exit("--kin называет страницы, которых нет в --pages: "
+                     + ", ".join(sorted(set(kin) - set(pages or []))))
+        add_verdict(a.ident, a.surname, a.verdict, a.status, pages, kin)
         print(f"журнал: {journal.rebuild()}")
         print_log(a.ident)
         return

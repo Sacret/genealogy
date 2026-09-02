@@ -90,7 +90,7 @@ def log_search(ident: str, surname: str, stem: str, threshold: float, hits) -> N
 
 
 def add_verdict(ident: str, surname: str, verdict: str,
-                status: str = "unclear", confirmed=None) -> None:
+                status: str = "unclear", confirmed=None, kin=None) -> None:
     """Итог проверки глазами.
 
     Сырое число попаданий обманчиво: пять кандидатов на 'Кармазинъ'
@@ -102,6 +102,11 @@ def add_verdict(ident: str, surname: str, verdict: str,
     отклонённых кандидатов ('стр. 336 — Текучевъ'), и у находок в
     соседних томах, а журнал выделял такие номера как подтверждённые
     и подставлял к ним вырезки.
+
+    `kin` — подмножество `confirmed`: страницы, где найден человек, чьё
+    родство установлено, а не просто однофамилец. Разделять это важно:
+    Могучевыхъ из ст. Кочетовской в приказах несколько семей, и журнал,
+    красящий их все одинаково, обещает больше, чем известно.
     """
     rec = {
         "type": "verdict",
@@ -112,6 +117,8 @@ def add_verdict(ident: str, surname: str, verdict: str,
     }
     if confirmed is not None:
         rec["confirmed"] = [str(p) for p in confirmed]
+    if kin is not None:
+        rec["kin"] = [str(p) for p in kin]
     with (doc_dir(ident) / "searches.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 

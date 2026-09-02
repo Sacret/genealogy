@@ -14,7 +14,7 @@ import pathlib
 import re
 from collections import OrderedDict
 
-from docstore import ROOT, documents, load_meta, read_log
+from docstore import ROOT, documents, latest_verdicts, load_meta, read_log
 
 STATUS = {
     "found":   ("найдена",      "ok"),
@@ -340,7 +340,7 @@ def collect():
     for ident in documents():
         meta = load_meta(ident)
         log = read_log(ident)
-        verdicts = {r["surname"]: r for r in log if r.get("type") == "verdict"}
+        verdicts = latest_verdicts(ident)
         # Только последний поиск по каждой фамилии: повторные прогоны
         # (после починки конвейера, с другим порогом) иначе дублируют
         # строку и тянут за собой один и тот же вердикт. Полная история

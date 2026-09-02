@@ -75,14 +75,23 @@ def main():
     ap.add_argument("--no-log", action="store_true", help="не записывать в журнал")
     ap.add_argument("--verdict", help="записать итог проверки глазами и выйти")
     ap.add_argument("--status", choices=("found", "absent", "unclear"),
-                    default="unclear", help="итог: найдена / нет / неясно")
+                    help="итог: найдена / нет / неясно. Обязателен при --verdict")
     ap.add_argument("--pages", help="страницы, где фамилия подтверждена глазами, "
                                     "через запятую: '223'. Только эти журнал "
                                     "выделяет и снабжает вырезкой")
     a = ap.parse_args()
 
     if a.verdict and a.surname:
+        # Итог требуется назвать словом. Раньше --status по умолчанию был
+        # 'unclear', и вердикт, начинающийся с «НЕ НАЙДЕНА», ложился в
+        # журнал как «не проверено»: текст читает человек, а разбирает
+        # строки — журнал (так и вышло с томом за 1877 год).
+        if not a.status:
+            sys.exit("вердикт без --status: скажите found / absent / unclear")
         pages = re.findall(r"\d+", a.pages) if a.pages else None
+        if a.status == "found" and not pages:
+            sys.exit("--status found без --pages: назовите страницы находки, "
+                     "иначе журнал возьмёт номера из текста вердикта")
         add_verdict(a.ident, a.surname, a.verdict, a.status, pages)
         print(f"журнал: {journal.rebuild()}")
         print_log(a.ident)

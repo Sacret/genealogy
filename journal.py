@@ -355,7 +355,8 @@ def collect():
             v = verdicts.get(r["surname"])
             rows.append({**r,
                          "status": (v or {}).get("status", "unclear"),
-                         "verdict": (v or {}).get("verdict", "")})
+                         "verdict": (v or {}).get("verdict", ""),
+                         "confirmed": (v or {}).get("confirmed")})
         rows.sort(key=lambda r: r["date"])
         if rows or meta:
             docs[ident] = {"meta": meta, "rows": rows,
@@ -456,12 +457,19 @@ def render(docs) -> str:
         for r in rows:
             label, cls = STATUS[r["status"]]
             pages = r.get("pages_with_hits") or []
-            # Страницы, названные в вердикте, выделены жирным: именно они
-            # подтверждены глазами, остальные — кандидаты, которые отсеялись.
+            # Страницы с подтверждённой находкой выделены жирным, и только
+            # к ним журнал подставляет вырезку. Берутся они из поля
+            # `confirmed` вердикта: вытаскивать номера из его текста
+            # (что делалось раньше) нельзя — там названы и отклонённые
+            # кандидаты, и находки в соседних томах, так что 'Текучевъ'
+            # на стр. 336 попадал в журнал как найденный Могучевъ.
+            # Для старых вердиктов, записанных без поля, остаётся разбор
+            # текста: он врёт, но реже, чем пустота на месте находки.
             confirmed = set()
             if r["status"] == "found":
-                confirmed = set(re.findall(r"стр\.?\s*(\d+)",
-                                           r.get("verdict", ""), re.I))
+                confirmed = set(r.get("confirmed")
+                                or re.findall(r"стр\.?\s*(\d+)",
+                                              r.get("verdict", ""), re.I))
             links = []
             for p in pages:
                 cl = " class=hit" if p in confirmed else ""

@@ -76,10 +76,14 @@ def main():
     ap.add_argument("--verdict", help="записать итог проверки глазами и выйти")
     ap.add_argument("--status", choices=("found", "absent", "unclear"),
                     default="unclear", help="итог: найдена / нет / неясно")
+    ap.add_argument("--pages", help="страницы, где фамилия подтверждена глазами, "
+                                    "через запятую: '223'. Только эти журнал "
+                                    "выделяет и снабжает вырезкой")
     a = ap.parse_args()
 
     if a.verdict and a.surname:
-        add_verdict(a.ident, a.surname, a.verdict, a.status)
+        pages = re.findall(r"\d+", a.pages) if a.pages else None
+        add_verdict(a.ident, a.surname, a.verdict, a.status, pages)
         print(f"журнал: {journal.rebuild()}")
         print_log(a.ident)
         return

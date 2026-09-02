@@ -90,12 +90,18 @@ def log_search(ident: str, surname: str, stem: str, threshold: float, hits) -> N
 
 
 def add_verdict(ident: str, surname: str, verdict: str,
-                status: str = "unclear") -> None:
+                status: str = "unclear", confirmed=None) -> None:
     """Итог проверки глазами.
 
     Сырое число попаданий обманчиво: пять кандидатов на 'Кармазинъ'
     оказались словом 'Кармалинъ' и именем 'Харлампій'. Без явного
     вердикта журнал через месяц читается как 'фамилия найдена'.
+
+    `confirmed` — страницы, где фамилия действительно стоит. Их нельзя
+    вывести из текста вердикта: в нём номера страниц называются и у
+    отклонённых кандидатов ('стр. 336 — Текучевъ'), и у находок в
+    соседних томах, а журнал выделял такие номера как подтверждённые
+    и подставлял к ним вырезки.
     """
     rec = {
         "type": "verdict",
@@ -104,6 +110,8 @@ def add_verdict(ident: str, surname: str, verdict: str,
         "status": status,          # found | absent | unclear
         "verdict": verdict,
     }
+    if confirmed is not None:
+        rec["confirmed"] = [str(p) for p in confirmed]
     with (doc_dir(ident) / "searches.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 

@@ -20,6 +20,8 @@ on:
       - favicon.ico
       - "*/crops/**"
       - .github/workflows/pages.yml
+  # Ручной запуск: Actions -> в левом списке «Журнал на Pages» -> Run workflow.
+  # Кнопка появляется на странице самого workflow, а не на общей вкладке.
   workflow_dispatch:
 
 permissions:

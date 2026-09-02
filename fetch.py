@@ -10,7 +10,9 @@ API вьюера, найденный в его же JS (объект RouteConsta
 Возобновляемо: уже лежащие файлы пропускаются.
 """
 
-import argparse, json, signal, sys, threading, time, urllib.request, urllib.error
+import argparse, http.client, json, socket, sys, threading, time
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 
 from docstore import UA, doc_id, doc_dir, fetch_title, load_meta, save_meta
 
@@ -31,29 +33,33 @@ class Stalled(OSError):
     """Попытка съела весь отведённый ей срок целиком."""
 
 
-def _hard_deadline(seconds):
+def _watchdog(conn, deadline, stalled):
     """Потолок на всю попытку, а не на отдельное чтение сокета.
 
     Таймаута `urlopen` для этого мало: он ограничивает одну операцию с
     сокетом, поэтому соединение, отдающее по байту раз в минуту, живёт
     вечно. На стр. 313 bv0000391 так и вышло — процесс 16 минут простоял
     в SSL-чтении заголовков ответа, пока curl брал ту же страницу за две
-    секунды. SIGALRM рвёт блокирующий вызов независимо от того, что там
-    с сокетом; Stalled наследует OSError, так что попадает в общий разбор
-    ниже и приводит к обычному повтору.
+    секунды.
 
-    Сигналы ставятся только из главного потока, поэтому в потоках (prep.py,
-    crop.py зовут ensure_page) остаётся голый таймаут сокета.
+    Раньше срок держал SIGALRM, но сигналы ставятся только из главного
+    потока, так что в пуле защита пропадала — а качаем мы теперь именно
+    в пуле. Сторожевой таймер вместо этого рвёт сам сокет: shutdown()
+    будит чтение, заблокированное в другом потоке, и оно падает обычным
+    OSError, то есть попадает в общий разбор ниже и приводит к повтору.
     """
-    if threading.current_thread() is not threading.main_thread():
-        return lambda: None
+    def cut():
+        stalled.set()
+        try:
+            if conn.sock is not None:
+                conn.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass            # успели закрыть сами — сторожу больше нечего рвать
 
-    def fire(sig, frame):
-        raise Stalled(f"нет ответа за {seconds} с")
-
-    prev = signal.signal(signal.SIGALRM, fire)
-    signal.alarm(seconds)
-    return lambda: (signal.alarm(0), signal.signal(signal.SIGALRM, prev))
+    t = threading.Timer(deadline, cut)
+    t.daemon = True
+    t.start()
+    return t
 
 
 def get(url, referer, retries=5, timeout=30, deadline=60):
@@ -63,18 +69,31 @@ def get(url, referer, retries=5, timeout=30, deadline=60):
     как ConnectionResetError, который URLError не является, и на длинном
     прогоне одна такая осечка иначе убивает всю оставшуюся работу.
     """
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": referer})
+    u = urllib.parse.urlsplit(url)
+    cls = (http.client.HTTPSConnection if u.scheme == "https"
+           else http.client.HTTPConnection)
+    path = u.path + (f"?{u.query}" if u.query else "")
+    headers = {"User-Agent": UA, "Referer": referer}
+
     for attempt in range(retries):
-        disarm = _hard_deadline(deadline)
+        conn = cls(u.netloc, timeout=timeout)
+        stalled = threading.Event()
+        guard = _watchdog(conn, deadline, stalled)
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return r.read()
+            conn.request("GET", path, headers=headers)
+            r = conn.getresponse()
+            if r.status != 200:
+                raise OSError(f"HTTP {r.status} {r.reason}")
+            return r.read()
         except OSError as e:            # URLError, ConnectionResetError, таймауты
+            if stalled.is_set():
+                e = Stalled(f"нет ответа за {deadline} с")
             if attempt == retries - 1:
-                raise
+                raise e
             time.sleep(min(2 ** attempt, 15))   # библиотека маленькая, не давим
         finally:
-            disarm()
+            guard.cancel()
+            conn.close()
 
 
 def page_count(base):
@@ -109,7 +128,10 @@ def main():
     ap.add_argument("--first", type=int, default=1)
     ap.add_argument("--last", type=int)
     ap.add_argument("--pages", help="только эти страницы: 179,494,500-505")
-    ap.add_argument("--delay", type=float, default=0.5, help="пауза между запросами, сек")
+    ap.add_argument("--delay", type=float, default=0.5,
+                    help="пауза после каждой страницы, сек (на каждый поток)")
+    ap.add_argument("--workers", type=int, default=4,
+                    help="сколько страниц тянуть одновременно")
     a = ap.parse_args()
 
     base = a.base.rstrip("/")
@@ -124,25 +146,47 @@ def main():
 
     wanted = parse_pages(a.pages) if a.pages else range(a.first, last + 1)
     print(f"{ident}: страниц {total}; качаем {len(list(wanted))} шт. @ {a.dpi} dpi")
-    done = skipped = 0
+    # Узкое место — не мы, а сервер: одна страница в 700 КБ приходит за 12 с
+    # (57 КБ/с), при этом стороннее соединение получает свою за те же 12 с и
+    # основной цикл не замедляет. Душат каждое соединение по отдельности, а не
+    # клиента целиком, поэтому потоки складываются почти линейно: 513 страниц
+    # это два часа в одиночку и полчаса вчетвером.
+    todo = [n for n in wanted
+            if not ((out / f"p{n:04d}.jpg").exists()
+                    and (out / f"p{n:04d}.jpg").stat().st_size > 1024)]
+    skipped = len(list(wanted)) - len(todo)
+    done = 0
     failed = []
-    for n in wanted:
+    lock = threading.Lock()
+
+    def fetch_one(n):
+        nonlocal done
         dst = out / f"p{n:04d}.jpg"
-        if dst.exists() and dst.stat().st_size > 1024:
-            skipped += 1
-            continue
         try:
-            dst.write_bytes(get(f"{base}/page/{n}/image/{a.dpi}", referer))
+            data = get(f"{base}/page/{n}/image/{a.dpi}", referer)
         except OSError as e:
             # Одна безнадёжная страница не должна ронять прогон на сотни
             # страниц: запоминаем и идём дальше, добрать можно повтором.
-            failed.append(n)
+            with lock:
+                failed.append(n)
             print(f"  стр. {n}: не удалось ({e})", file=sys.stderr)
-            continue
-        done += 1
-        if done % 25 == 0:
-            print(f"  {n}/{last}  скачано {done}, пропущено {skipped}", file=sys.stderr)
+            return
+        # Пишем через временное имя: оборванный на середине процесс иначе
+        # оставит обрезанный JPEG, который пройдёт проверку по размеру и
+        # молча испортит распознавание.
+        tmp = dst.with_suffix(".part")
+        tmp.write_bytes(data)
+        tmp.replace(dst)
+        with lock:
+            done += 1
+            if done % 25 == 0:
+                print(f"  {done}/{len(todo)}  скачано {done}, пропущено {skipped}",
+                      file=sys.stderr)
         time.sleep(a.delay)
+
+    with ThreadPoolExecutor(max_workers=a.workers) as pool:
+        list(pool.map(fetch_one, todo))
+
     if failed:
         print(f"НЕ СКАЧАНЫ {len(failed)} стр.: "
               f"{','.join(map(str, failed))}\n  добрать: fetch.py {base} "

@@ -22,9 +22,20 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
 ROOT = pathlib.Path(__file__).parent
 
 
+def doc_base(base_url: str) -> str:
+    """URL документа без хвоста вьюера: .../bv0000410/view/ → .../bv0000410.
+
+    Ссылку берут из адресной строки, а там открыта страница просмотра.
+    С «/view» на конце документ звался бы «view», а запросы уходили бы в
+    /bv0000410/view/page/sizes — сервер отвечает на это 500.
+    """
+    u = base_url.rstrip("/")
+    return u[:-len("/view")] if u.endswith("/view") else u
+
+
 def doc_id(base_url: str) -> str:
     """Идентификатор документа — последний сегмент URL: bv0000407."""
-    return base_url.rstrip("/").rsplit("/", 1)[-1]
+    return doc_base(base_url).rsplit("/", 1)[-1]
 
 
 def doc_dir(ident: str) -> pathlib.Path:

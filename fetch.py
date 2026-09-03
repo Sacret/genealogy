@@ -14,7 +14,7 @@ import argparse, http.client, json, socket, sys, threading, time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-from docstore import UA, doc_id, doc_dir, fetch_title, load_meta, save_meta
+from docstore import UA, doc_base, doc_id, doc_dir, fetch_title, load_meta, save_meta
 
 
 def parse_pages(spec: str):
@@ -134,7 +134,7 @@ def main():
                     help="сколько страниц тянуть одновременно")
     a = ap.parse_args()
 
-    base = a.base.rstrip("/")
+    base = doc_base(a.base)
     referer = f"{base}/view/"
     ident = doc_id(base)
     total = page_count(base)

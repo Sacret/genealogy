@@ -130,6 +130,13 @@ tr.hidden { display: none; }
 .badge.no { background: var(--no-bg); color: var(--no-ink); }
 .badge.wait { background: var(--wait-bg); color: var(--wait-ink); }
 .note { color: var(--dim); font-size: 13px; margin-top: 5px; max-width: 62ch; }
+/* Вердикт длинный, и в нём три разных голоса: мой пересказ, цитата из
+   приказа и то, что автор выделил капслоком. Курсив и жирный разводят их
+   по слоям, абзац отделяет разбор одного человека от другого. */
+.note p { margin: 0 0 .7em; }
+.note p:last-child { margin-bottom: 0; }
+.note em { font-style: italic; color: var(--ink); }
+.note strong { font-weight: 650; color: var(--ink); letter-spacing: .01em; }
 
 .pages { font-size: 13px; line-height: 1.9; }
 .pages a { color: var(--accent); text-decoration: none;
@@ -233,6 +240,67 @@ def plural(n, one, few, many):
         return many
     d = n % 10
     return one if d == 1 else few if 2 <= d <= 4 else many
+
+
+# --- разметка вердикта -------------------------------------------------
+#
+# Вердикт вычитывается глазами и потому длинный: цитата из приказа, разбор
+# отклонённых кандидатов, оговорка о полноте. Сплошным абзацем всё это
+# читается плохо, а главное — цитата из документа неотличима от моего
+# пересказа. Разметка ставится здесь, при сборке страницы, а не хранится
+# в searches.jsonl: источник истины остаётся простым текстом, и правило
+# задним числом приводит в порядок все вердикты, включая записанные
+# годы назад.
+#
+# Курсив — цитаты: «…» это выписка из приказа, '…' — распознанная форма
+# слова. Жирный — то, что автор вердикта уже выделил капслоком: сам итог
+# («НЕ НАЙДЕНА»), имя человека в разборе, оговорки вроде «СТАНИЦА НЕ
+# НАЗВАНА». Своей эмфазы журнал не придумывает.
+
+QUOTE = re.compile(r"«[^»]*»|'[^']{1,80}'")
+
+# Капслоком набирается только кириллица: латинские CAPS в вердиктах —
+# это OCR и bv-номера, выделять их незачем. Дореформенные прописные
+# входят в набор: без них «АЛЕКСѢЙ МОГУЧЕВЪ» разваливается надвое, и
+# ять посередине остаётся невыделенным.
+CAP = "А-ЯЁІѢѲѴ"
+CAPS = re.compile(rf"[{CAP}]{{2,}}(?:[ \u00a0-]+[{CAP}]+)*")
+
+# Абзац начинается с номера разбираемого человека — «(1)», «(2)» —
+# или с капслочной врезки. Кроме них у вердиктов есть устойчивые зачины
+# проверочной части: с них начинается не новая мысль, а новый раздел.
+BREAK = re.compile(
+    rf"(?<=[.!?])\s+(?=\(\d\)\s|[{CAP}]{{2,}}(?:[ \u00a0-]+[{CAP}]+)+[ ,.:—]"
+    r"|Отклонен|Проверочные поиски|Режим --short|Сверены все|Счёт по)")
+
+
+def markup(text: str) -> str:
+    """Текст вердикта -> HTML: цитаты курсивом, капслок жирным, абзацы."""
+    def inline(s):
+        out, pos = [], 0
+        for m in QUOTE.finditer(s):
+            out.append(caps(s[pos:m.start()]))
+            # Кавычки-ёлочки — часть цитаты и остаются, а прямые апострофы
+            # были в тексте заменой курсиву: раз курсив теперь настоящий,
+            # они только сорят.
+            q = m.group()
+            q = q[1:-1] if q[0] == "'" else q
+            out.append(f"<em>{e(q)}</em>")
+            pos = m.end()
+        out.append(caps(s[pos:]))
+        return "".join(out)
+
+    def caps(s):
+        out, pos = [], 0
+        for m in CAPS.finditer(s):
+            out.append(e(s[pos:m.start()]))
+            out.append(f"<strong>{e(m.group())}</strong>")
+            pos = m.end()
+        out.append(e(s[pos:]))
+        return "".join(out)
+
+    return "".join(f"<p>{inline(p.strip())}</p>"
+                   for p in BREAK.split(text.strip()) if p.strip())
 
 
 def doc_year(meta) -> int | None:
@@ -527,7 +595,8 @@ def render(docs) -> str:
             out.append(f"<td class=surname>{e(r['surname'])}</td>")
             out.append(f"<td class=num>{r['hits']}</td>")
             out.append(f"<td class=pages>{', '.join(links) or '—'}</td>")
-            note = (f"<div class=note>{e(r['verdict'])}</div>" if r["verdict"] else "")
+            note = (f"<div class=note>{markup(r['verdict'])}</div>"
+                    if r["verdict"] else "")
             shots = ""
             for page, f in crops_for(ident, r["surname"], confirmed):
                 who = ("родство подтверждено" if str(page) in kin

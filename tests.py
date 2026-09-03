@@ -2,6 +2,7 @@
 падежи и типичные подмены букв в OCR."""
 
 import sys
+from find import bare_old_spelling
 from surnamefind.search import find_in_text, stem_query
 
 # (текст, должно ли найтись)
@@ -55,8 +56,9 @@ def main():
     print(f"основа 'Кузнѣцова'  -> {stem_query('Кузнѣцова')!r}")
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
-    bad = hyphen_suite()
-    total = len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
+    bad = hyphen_suite() + spelling_suite()
+    total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
+             + len(CASES_SPELLING))
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -86,6 +88,36 @@ def hyphen_suite():
         mark = "ok " if got == expected else "FAIL"
         det = f" -> {hits[0].raw!r} половина={hits[0].partial}" if hits else ""
         print(f"  [{mark}] {text.splitlines()[0][:28]!r:32}{det}")
+    return bad
+
+
+
+# (текст вердикта, что проверка обязана назвать нарушением)
+CASES_SPELLING = [
+    ("Та же станица, что у Алексѣя Могучева", ["Алексѣя"]),
+    ("Та же станица, что у Алексея Могучева", []),
+    # Внутри кавычек и апострофов старое написание законно.
+    ("'урядникъ Іосифъ Даниловъ Могучевъ', на службе с 1854 г.", []),
+    ("«Могучевъ Иванъ, переп. 1904 года» — награда объявлена", []),
+    ("Отклонены: Караваевъ, 'Карасевъ', «Каргинъ»", ["Караваевъ"]),
+    # Капслок правило не отменяет: так вышло с томом за 1909 год.
+    ("ЭТО ПОВТОРЕНИЕ ПУТИ АЛЕКСѢЯ МОГУЧЕВА", ["АЛЕКСѢЯ"]),
+    # Внутренний еръ — не старое написание.
+    ("награда объявлена, разъяснение дано", []),
+    ("писарь Управленія Донскаго округа", ["Донскаго", "Управленія"]),
+    ("благо и Чикаго на -аго не похожи", []),
+]
+
+
+def spelling_suite():
+    bad = 0
+    print("\nорфография вердикта:")
+    for text, expected in CASES_SPELLING:
+        got = bare_old_spelling(text)
+        if got != expected:
+            bad += 1
+        mark = "ok " if got == expected else "FAIL"
+        print(f"  [{mark}] {text[:44]!r:48} -> {got}")
     return bad
 
 if __name__ == "__main__":

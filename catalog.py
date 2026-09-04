@@ -155,6 +155,16 @@ YANDEX_PAMYATNYE_YEARS = {
 }
 PAMYATNAYA = re.compile(r"Памятная книжка.*[Вв]ойска Донского", re.I)
 
+# Скан снят плохо: том брать стоит, но отрицательный ответ поиска по нему
+# будет стоить немного, поэтому в своей очереди он идёт последним — после
+# тех, где распознавание отработает в полную силу. Причина пишется рядом
+# с документом в `documents.json`: иначе место в хвосте очереди выглядело
+# бы случайностью, а не решением.
+POOR_SCAN = {
+    "ot0000011": "плохое качество скана",
+    "ot0000013": "плохое качество скана",
+}
+
 QUEUES = ("1_приказы_по_войску_донскому",
           "2_казачество_войско_донское_новочеркасск",
           "3_донской_край_прочее")
@@ -314,6 +324,8 @@ def build(catalog: dict) -> dict:
         y = year(title)
         if y:
             rec["год"] = y
+        if ident in POOR_SCAN:
+            rec["качество"] = POOR_SCAN[ident]
 
         verdicts = latest_verdicts(ident) if load_meta(ident) else {}
         if verdicts:
@@ -342,7 +354,14 @@ def build(catalog: dict) -> dict:
     q2.sort(key=lambda r: (r["подгруппа"] != "адрес-календари и справочники",
                            r["id"]))
 
-    numbers = sorted(number_of(i) for i in catalog)
+    # Плохие сканы — в конец своей очереди. Сортировка устойчива, так что
+    # порядок остальных, включая подгруппы второй очереди, не меняется.
+    for items in out["очередь"].values():
+        items.sort(key=lambda r: r["id"] in POOR_SCAN)
+
+    # Диапазон — про сплошной опрос bv-номеров; тома с другим префиксом
+    # приходят по прямой ссылке и границ опроса не двигают.
+    numbers = sorted(number_of(i) for i in catalog if i.startswith("bv"))
     if numbers:
         out["диапазон"] = f"{ident_of(numbers[0])} — {ident_of(numbers[-1])}"
     # Номера могли опрашиваться отрезками, так что границы ещё не значат,
@@ -419,7 +438,9 @@ def main():
     a = ap.parse_args()
 
     catalog = load_catalog()
-    known = {number_of(i) for i in catalog}
+    # Только bv: у документов с другим префиксом своя нумерация, и
+    # bv0000011 не становится опрошенным оттого, что есть ot0000011.
+    known = {number_of(i) for i in catalog if i.startswith("bv")}
 
     if not a.rebuild:
         if a.range:

@@ -3,6 +3,7 @@
 
 import sys
 from catalog import classify
+from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling
 from surnamefind.search import find_in_text, stem_query
 
@@ -57,7 +58,8 @@ def main():
     print(f"основа 'Кузнѣцова'  -> {stem_query('Кузнѣцова')!r}")
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
-    bad = hyphen_suite() + spelling_suite() + catalog_suite()
+    bad = (hyphen_suite() + spelling_suite() + catalog_suite()
+           + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG))
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
@@ -163,6 +165,29 @@ def catalog_suite():
         mark = "ok " if got == expected else "FAIL"
         print(f"  [{mark}] {title[:52]!r:56} -> {got}")
     return bad
+
+
+def gitignore_suite():
+    """Страница находки должна пережить чистку сканов.
+
+    Список исключений в .gitignore вёлся руками и разошёлся с журналом:
+    из шестнадцати страниц находок в репозиторий попали десять, причём
+    три из недостающих — с подтверждённым родством. Теперь список пишет
+    prune.sync_gitignore, а эта проверка ловит расхождение.
+    """
+    listed = {m.group(1) for m in
+              (KEEP_LINE.match(ln) for ln in
+               GITIGNORE.read_text(encoding="utf-8").splitlines()) if m}
+    need = set(finding_pages())
+    print("\nстраницы находок в .gitignore:")
+    print(f"  находок {len(need)}, перечислено {len(listed)}")
+    for path in sorted(need - listed):
+        print(f"  [FAIL] не перечислена: {path}")
+    for path in sorted(listed - need):
+        print(f"  [FAIL] лишняя запись:  {path}")
+    if need == listed:
+        print("  [ok ] совпадает")
+    return len(need ^ listed)
 
 
 if __name__ == "__main__":

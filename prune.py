@@ -21,7 +21,8 @@ import shutil
 import subprocess
 import sys
 
-from docstore import doc_dir, latest_verdicts, load_meta, read_log, save_meta
+from docstore import (ROOT, doc_dir, documents, latest_verdicts, load_meta,
+                      read_log, save_meta)
 
 
 # Ссылка на другой документ: "тот же человек, что в bv0000386 стр. 208".
@@ -89,12 +90,106 @@ def confirmed_hits(ident: str):
     return out
 
 
+# --- список находок в .gitignore --------------------------------------
+#
+# Сканы выброшены целиком (`*/scans/*`), кроме страниц с подтверждёнными
+# находками: на них стоит весь результат работы, а восстановление кэша
+# держится на том, что документ остаётся доступен в библиотеке.
+#
+# Список этих исключений вёлся руками — и разошёлся с журналом: из
+# шестнадцати страниц находок в репозиторий попали десять, а строки
+# дописывались в случайные места файла, в том числе после раздела о
+# порождаемых файлах. Теперь его пишет `sync_gitignore` по вердиктам.
+
+GITIGNORE = ROOT / ".gitignore"
+MARK_BEGIN = "# --- страницы находок: список ведёт prune.py ---"
+MARK_END = "# --- конец списка находок ---"
+KEEP_LINE = re.compile(r"^!(bv\d+/scans/p\d+\.jpg)\s*$")
+ANCHOR = "*/scans/*"
+
+
+def finding_pages() -> dict:
+    """Страница находки → подпись по умолчанию, по всем документам."""
+    out = {}
+    for ident in documents():
+        meta = load_meta(ident)
+        total = meta.get("pages")
+        year = re.search(r"\b(1[6-9]\d\d)\b", meta.get("title", ""))
+        for surname, rec in sorted(latest_verdicts(ident).items()):
+            if rec.get("status") != "found":
+                continue
+            kin = {str(p) for p in (rec.get("kin") or [])}
+            for page in confirmed_pages(rec, total):
+                path = f"{ident}/scans/p{page:04d}.jpg"
+                note = f"{year.group(1) + ', ' if year else ''}{surname}"
+                if str(page) in kin:
+                    note += ", родство подтверждено"
+                out.setdefault(path, note)
+    return dict(sorted(out.items()))
+
+
+def sync_gitignore() -> list:
+    """Переписать список находок в .gitignore. Возвращает добавленное.
+
+    Подписи, написанные руками, сохраняются: в них есть номер приказа,
+    станица и чин, которых из вердикта не вытащить. Своя подпись даётся
+    только новой странице.
+    """
+    lines = GITIGNORE.read_text(encoding="utf-8").splitlines()
+
+    # Старые записи могут лежать где угодно — собираем их отовсюду
+    # вместе с подписью, стоящей строкой выше, и вырезаем из файла.
+    notes, rest = {}, []
+    for line in lines:
+        m = KEEP_LINE.match(line)
+        if m:
+            if rest and rest[-1].startswith("#"):
+                notes[m.group(1)] = rest.pop().lstrip("# ").strip()
+            continue
+        if line in (MARK_BEGIN, MARK_END):
+            continue
+        rest.append(line)
+
+    pages = finding_pages()
+    block = [MARK_BEGIN]
+    for path, default in pages.items():
+        block.append(f"# {notes.get(path, default)}")
+        block.append(f"!{path}")
+    block.append(MARK_END)
+
+    if ANCHOR in rest:
+        at = rest.index(ANCHOR) + 1
+    else:                                   # якоря нет — кладём в конец
+        at = len(rest)
+        block = ["", *block]
+    out = [*rest[:at], "", *block, *rest[at:]]
+
+    # Пустые строки схлопываем: блок вырезали вместе с окружением, и
+    # повторный прогон иначе растил бы файл вниз на одну строку за раз.
+    tidy = [ln for i, ln in enumerate(out)
+            if ln.strip() or (i and out[i - 1].strip())]
+    GITIGNORE.write_text("\n".join(tidy).rstrip("\n") + "\n", encoding="utf-8")
+    return [p for p in pages if p not in notes]
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("ident")
+    ap.add_argument("ident", nargs="?")
     ap.add_argument("--apply", action="store_true", help="действительно удалить")
     ap.add_argument("--keep", help="дополнительно сохранить: 12,300-310")
+    ap.add_argument("--gitignore", action="store_true",
+                    help="переписать список страниц находок в .gitignore")
     a = ap.parse_args()
+
+    if a.gitignore:
+        added = sync_gitignore()
+        print(f"{GITIGNORE.name}: страниц находок {len(finding_pages())}"
+              + (f", новых {len(added)}" if added else ""))
+        for path in added:
+            print("  +", path)
+        return
+    if not a.ident:
+        ap.error("нужен идентификатор документа (или --gitignore)")
 
     d = doc_dir(a.ident)
     scans = sorted((d / "scans").glob("p*.jpg"))

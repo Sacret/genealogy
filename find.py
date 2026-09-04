@@ -13,6 +13,7 @@ import sys
 
 import catalog
 import journal
+import prune
 from docstore import add_verdict, doc_dir, load_meta, log_search, print_log
 from surnamefind.search import find_in_pages, stem_query
 from surnamefind.match import default_threshold
@@ -157,6 +158,11 @@ def main():
         # Вердикт — это и есть момент, когда том уходит из очереди в
         # просмотренные. Список, который правят руками, назавтра врёт.
         print(f"каталог: {catalog.refresh(a.ident)}")
+        # Страница находки — единственный скан, который держим в
+        # репозитории, и список этих исключений в .gitignore вёлся
+        # руками: из шестнадцати страниц туда попали десять.
+        for path in prune.sync_gitignore():
+            print(f"  в .gitignore добавлена страница находки: {path}")
         print_log(a.ident)
         return
 

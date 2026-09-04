@@ -8,12 +8,19 @@
 матчер.
 
     python3 crop.py bv0000407 494 Могучевъ
+
+Если по целой странице слово не нашлось, идёт второй проход — полосами,
+теми же, что режет rescue.py. Иначе находка, которую вытащило только
+перечитывание полосами, осталась бы без вырезки: так вышло с фельдшером
+Могучевым на стр. 176 тома bv0000031, где основное распознавание съело
+фамилию целиком, оставив один адрес.
 """
 
-import argparse, csv, io, pathlib, subprocess, sys
+import argparse, csv, io, pathlib, subprocess, sys, tempfile
 
 from docstore import doc_dir
 from fetch import ensure_page
+from rescue import BAND, STEP
 from surnamefind.normalize import normalize
 from surnamefind.search import stem_query
 from surnamefind.match import prefix_distance, default_threshold, score
@@ -32,6 +39,51 @@ def words(img: pathlib.Path, lang="rus", psm="6"):
         yield text, (int(r["left"]), int(r["top"]),
                      int(r["left"]) + int(r["width"]),
                      int(r["top"]) + int(r["height"]))
+
+
+def overlap(a, b) -> float:
+    """Доля пересечения двух боксов от меньшего из них."""
+    x0, y0 = max(a[0], b[0]), max(a[1], b[1])
+    x1, y1 = min(a[2], b[2]), min(a[3], b[3])
+    if x1 <= x0 or y1 <= y0:
+        return 0.0
+    small = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return (x1 - x0) * (y1 - y0) / small if small else 0.0
+
+
+def words_in_bands(img, lang="rus", psm="6"):
+    """То же, но по горизонтальным полосам внахлёст, с пересчётом в
+    координаты страницы.
+
+    Полосы те же, что у rescue.py: узкая полоса читается лучше целой
+    страницы — соседние строки не мешают, и Tesseract не пытается
+    разложить два столбца в один поток.
+
+    Полосы идут внахлёст, поэтому одно и то же слово приходит дважды, и
+    повторы отсеиваются по пересечению боксов, а не по тексту: соседние
+    полосы читают слово чуть по-разному («Могучевъ» и «Могучевь»), и
+    отсев по тексту пропускал обе вырезки в журнал.
+    """
+    from PIL import Image
+    im = Image.open(img)
+    w, h = im.size
+    seen = []
+    with tempfile.TemporaryDirectory() as tmp:
+        band = pathlib.Path(tmp) / "band.jpg"
+        for top in range(0, h - 60, STEP):
+            im.crop((0, top, w, min(h, top + BAND))).save(band, dpi=(400, 400))
+            for text, (x0, y0, x1, y1) in words(band, lang, psm):
+                box = (x0, y0 + top, x1, y1 + top)
+                if any(overlap(box, b) > 0.5 for b in seen):
+                    continue
+                seen.append(box)
+                yield text, box
+
+
+def matches(stem, text, thr, fragile) -> bool:
+    """Слово из TSV, похожее на искомую фамилию не хуже порога."""
+    norm = normalize(text)
+    return bool(norm) and prefix_distance(stem, norm, fragile=fragile)[0] <= thr
 
 
 def main():
@@ -57,7 +109,10 @@ def main():
     out.mkdir(exist_ok=True)
     im = Image.open(img)
     found = 0
-    for text, (x0, y0, x1, y1) in words(img):
+    seen = list(words(img))
+    if not any(matches(stem, t, thr, fragile) for t, _ in seen):
+        seen = list(words_in_bands(img))     # страница не далась — читаем полосами
+    for text, (x0, y0, x1, y1) in seen:
         norm = normalize(text)
         if not norm:
             continue
@@ -75,8 +130,8 @@ def main():
         im.crop(box).save(dst)
         print(f"{dst}   {text!r}  score {score(stem, norm, fragile=fragile):.3f}")
     if not found:
-        print(f"на стр. {a.page} совпадений не нашлось "
-              f"(TSV-проход режет слова иначе, чем построчный)")
+        print(f"на стр. {a.page} совпадений не нашлось ни по целой странице, "
+              f"ни полосами (TSV-проход режет слова иначе, чем построчный)")
 
 
 if __name__ == "__main__":

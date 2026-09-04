@@ -153,6 +153,11 @@ tr.hidden { display: none; }
   min-width: 52px; text-align: center; padding: 5px 6px; border-radius: 7px;
   font-size: 12px; font-variant-numeric: tabular-nums; text-decoration: none;
   border: 1px solid var(--line); background: var(--card); color: var(--dim);
+  /* Клетки тянутся по высоте самой высокой в ряду, поэтому год центруется
+     внутри клетки, а не держится на отступе: иначе клетка с цифрой дел
+     поднимала бы ряд, и во всех соседних год оседал бы кверху. */
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1.2;
 }
 a.year:hover { border-color: var(--accent); }
 .year.maybe { background: var(--maybe-bg); color: var(--maybe-ink);
@@ -163,8 +168,11 @@ a.year:hover { border-color: var(--accent); }
 .year.wait { background: var(--wait-bg); color: var(--wait-ink);
              border-color: transparent; }
 .year.gap { background: transparent; border-style: dashed; opacity: .55; }
+/* Цифра поднимается своим align-self, а не vertical-align: у флексового
+   элемента vertical-align не работает вовсе, а в строке он растил бы
+   строчный бокс — с этого и съезжал текст. */
 .year .more { font-style: normal; font-size: 10px; opacity: .75;
-              margin-left: 3px; vertical-align: super; }
+              margin-left: 3px; align-self: flex-start; line-height: 1; }
 /* Пустая метка года перед первым делом этого года: цель ссылки из полосы.
    Отступ сверху — чтобы заголовок дела не прилипал к краю окна. */
 .year-mark { height: 0; scroll-margin-top: 16px; }

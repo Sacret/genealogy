@@ -11,6 +11,7 @@ import json
 import re
 import sys
 
+import catalog
 import journal
 from docstore import add_verdict, doc_dir, load_meta, log_search, print_log
 from surnamefind.search import find_in_pages, stem_query
@@ -153,6 +154,9 @@ def main():
                      + ", ".join(sorted(set(kin) - set(pages or []))))
         add_verdict(a.ident, a.surname, a.verdict, a.status, pages, kin)
         print(f"журнал: {journal.rebuild()}")
+        # Вердикт — это и есть момент, когда том уходит из очереди в
+        # просмотренные. Список, который правят руками, назавтра врёт.
+        print(f"каталог: {catalog.refresh(a.ident)}")
         print_log(a.ident)
         return
 
@@ -174,6 +178,7 @@ def main():
     if not a.no_log:
         log_search(a.ident, a.surname, stem, thr, hits)
         journal.rebuild()
+        catalog.refresh(a.ident)
 
     if a.json:
         print(json.dumps([h.__dict__ for h in hits], ensure_ascii=False, indent=2))

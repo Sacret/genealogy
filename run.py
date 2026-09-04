@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 
+import catalog
 from docstore import doc_id, load_meta
 
 
@@ -50,6 +51,9 @@ def main():
     for surname in a.find:
         step(f"поиск: {surname}", ["find.py", ident, surname])
 
+    # Без --find поиска не было, а значит, и никто не пересобрал список:
+    # том уже скачан и распознан, и в очереди ему больше не место.
+    catalog.refresh(ident)
     print(f"\nготово: {load_meta(ident).get('title', ident)}")
 
 

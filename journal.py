@@ -163,6 +163,11 @@ a.year:hover { border-color: var(--accent); }
 .year.wait { background: var(--wait-bg); color: var(--wait-ink);
              border-color: transparent; }
 .year.gap { background: transparent; border-style: dashed; opacity: .55; }
+.year .more { font-style: normal; font-size: 10px; opacity: .75;
+              margin-left: 3px; vertical-align: super; }
+/* Пустая метка года перед первым делом этого года: цель ссылки из полосы.
+   Отступ сверху — чтобы заголовок дела не прилипал к краю окна. */
+.year-mark { height: 0; scroll-margin-top: 16px; }
 .years-note { color: var(--dim); font-size: 12.5px; margin: 0 0 26px;
               max-width: 80ch; }
 
@@ -397,39 +402,64 @@ def thumb_uri(path: pathlib.Path, max_w=620) -> str:
 RANK = {"ok": 0, "maybe": 1, "wait": 2, "no": 3, "gap": 4}
 
 
+def year_anchor(y: int) -> str:
+    """Имя якоря года. Отдельное от имён дел: `bv0000407` — это дело, а
+    `g1897` — год, и по году может лежать не одно дело."""
+    return f"g{y}"
+
+
 def year_strip(docs) -> str:
-    """Сплошной ряд лет от первого до последнего: где документ, где пробел."""
-    years = {}
+    """Сплошной ряд лет от первого до последнего: где документ, где пробел.
+
+    Клетка ведёт на год, а не на дело. Пока журнал состоял из одних
+    приказов, год и дело были одним и тем же, и клетка вела прямо на
+    `bv...`. С адрес-календарями год перестаёт быть уникальным: «Приказы
+    за 1899» и «Памятная книжка на 1899» — разные дела одного года, и
+    ссылка на дело увела бы мимо половины года. Цвет при этом берётся по
+    лучшему исходу за год: если родственник найден хоть в одной книге,
+    год зелёный.
+    """
+    years, counts = {}, {}
     for ident, d in docs.items():
         y = d.get("year")
         if y is None:
             continue
+        counts[y] = counts.get(y, 0) + 1
         st = {r["status"] for r in d["rows"]}
         kin = any(confirmed_pages(r)[1] for r in d["rows"])
         cls = ("ok" if kin else
                "maybe" if "found" in st else
                "wait" if (not st or "unclear" in st) else "no")
         # Два дела за один год — берём лучший исход: год всё равно проверен.
-        if RANK.get(cls, 9) < RANK.get(years.get(y, ("gap",))[0], 9):
-            years[y] = (cls, ident)
+        if RANK.get(cls, 9) < RANK.get(years.get(y, "gap"), 9):
+            years[y] = cls
     if not years:
         return ""
     lo, hi = min(years), max(years)
     cells = []
     for y in range(lo, hi + 1):
         if y in years:
-            cls, ident = years[y]
-            cells.append(f"<a class='year {cls}' href='#{e(ident)}'>{y}</a>")
+            n = counts[y]
+            title = (f" title='{n} {plural(n, 'дело', 'дела', 'дел')} "
+                     f"за этот год'" if n > 1 else "")
+            cells.append(f"<a class='year {years[y]}' "
+                         f"href='#{year_anchor(y)}'{title}>{y}"
+                         + (f"<i class=more>{n}</i>" if n > 1 else "")
+                         + "</a>")
         else:
             cells.append(f"<span class='year gap' title='не смотрели'>{y}</span>")
-    checked, gaps = len(years), (hi - lo + 1) - len(years)
-    note = (f"{lo}—{hi}: просмотрено {checked} "
-            f"{plural(checked, 'дело', 'дела', 'дел')}, "
+    seen, gaps = sum(counts.values()), (hi - lo + 1) - len(years)
+    note = (f"{lo}—{hi}: просмотрено {seen} "
+            f"{plural(seen, 'дело', 'дела', 'дел')} за {len(years)} "
+            f"{plural(len(years), 'год', 'года', 'лет')}, "
             f"{gaps} {plural(gaps, 'год', 'года', 'лет')} в промежутке "
             "не открывали." if gaps else
-            f"{lo}—{hi}: сплошь, без пробелов.")
+            f"{lo}—{hi}: сплошь, без пробелов, {seen} "
+            f"{plural(seen, 'дело', 'дела', 'дел')}.")
+    multi = (" Цифра в клетке — сколько дел за этот год; цвет по лучшему "
+             "из них." if any(n > 1 for n in counts.values()) else "")
     return ("<div class=years>" + "".join(cells) + "</div>"
-            f"<p class=years-note>{note} Зелёный — найден человек, чьё "
+            f"<p class=years-note>{note}{multi} Зелёный — найден человек, чьё "
             "родство установлено; синий — фамилия найдена, но это "
             "однофамилец или родство не доказано; серый — искали и не "
             "нашли, пунктир — дело не смотрели.</p>")
@@ -522,10 +552,18 @@ def render(docs) -> str:
            "<input id=filter type=search placeholder='Фильтр по фамилии, "
            "документу или странице…' autocomplete=off>"]
 
+    # Якорь года ставится перед первым делом этого года. Дела уже
+    # отсортированы по годам, так что «первое» — это просто смена года.
+    # Якорь стоит снаружи секции нарочно: фильтр по фамилии прячет саму
+    # секцию, а ссылка из полосы лет должна вести куда-то и тогда.
+    seen_year = object()
     for ident, d in docs.items():
         meta, rows = d["meta"], d["rows"]
         title = meta.get("title") or ident
         url = meta.get("url", "")
+        if d.get("year") and d["year"] != seen_year:
+            seen_year = d["year"]
+            out.append(f"<div class=year-mark id='{year_anchor(seen_year)}'></div>")
         out.append(f"<section class=doc id='{e(ident)}'>")
         out.append(f"<h2>{e(title)}</h2>")
         bits = [f"<code>{e(ident)}</code>"]

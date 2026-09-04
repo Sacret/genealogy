@@ -3,6 +3,7 @@
 
 import sys
 from catalog import classify
+from journal import year_strip
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling
 from surnamefind.search import find_in_text, stem_query
@@ -59,9 +60,9 @@ def main():
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
     bad = (hyphen_suite() + spelling_suite() + catalog_suite()
-           + gitignore_suite())
+           + years_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
-             + len(CASES_SPELLING) + len(CASES_CATALOG))
+             + len(CASES_SPELLING) + len(CASES_CATALOG) + len(CASES_YEARS))
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -188,6 +189,49 @@ def gitignore_suite():
     if need == listed:
         print("  [ok ] совпадает")
     return len(need ^ listed)
+
+
+def _doc(year, status, kin=()):
+    """Дело для полосы лет: год, исход поиска и есть ли подтверждённое родство."""
+    row = {"surname": "Могучевъ", "status": status, "date": "2026-01-01",
+           "verdict": "", "confirmed": list(kin) or ["7"], "kin": list(kin)}
+    return {"meta": {}, "rows": [row], "coverage": None, "year": year}
+
+
+# Приказы шли по одному на год, и клетка полосы вела прямо на дело. С
+# адрес-календарями за 1899-й окажутся и приказы, и памятная книжка:
+# клетка должна вести на год, а цвет — браться по лучшему исходу за год,
+# иначе находка в одной книге пропала бы за «не найдено» в другой.
+CASES_YEARS = [
+    ("находка и пусто за один год",
+     {"a": _doc(1899, "absent"), "b": _doc(1899, "found", kin=["7"])},
+     ["#g1899", "class='year ok'", "<i class=more>2</i>"]),
+    ("однофамилец бьёт «не найдено»",
+     {"a": _doc(1902, "absent"), "b": _doc(1902, "found")},
+     ["#g1902", "class='year maybe'"]),
+    ("одно дело за год — без цифры",
+     {"a": _doc(1897, "absent")},
+     ["#g1897", "class='year no'"]),
+]
+
+
+def years_suite():
+    bad = 0
+    print("\nполоса лет:")
+    for name, docs, wanted in CASES_YEARS:
+        html = year_strip(docs)
+        missing = [w for w in wanted if w not in html]
+        if missing:
+            bad += 1
+        mark = "ok " if not missing else "FAIL"
+        print(f"  [{mark}] {name:34} " +
+              (f"нет: {missing}" if missing else "ok"))
+    # Цифра появляется только там, где дел больше одного.
+    single = year_strip({"a": _doc(1897, "absent")})
+    if "<i class=more>" in single:
+        bad += 1
+        print("  [FAIL] одиночный год помечен цифрой")
+    return bad
 
 
 if __name__ == "__main__":

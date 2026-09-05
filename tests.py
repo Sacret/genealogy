@@ -2,7 +2,7 @@
 падежи и типичные подмены букв в OCR."""
 
 import sys
-from catalog import classify
+from catalog import classify, years_covered
 from journal import markup, render, year_strip
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, kin_persons
@@ -63,10 +63,10 @@ def main():
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
            + years_suite() + persons_suite() + doclinks_suite()
            + pagelist_suite()
-           + gitignore_suite())
+           + pamyatnye_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 2)
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 2 + 8)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -210,6 +210,56 @@ def catalog_suite():
             bad += 1
         mark = "ok " if got == expected else "FAIL"
         print(f"  [{mark}] {title[:52]!r:56} -> {got}")
+    return bad
+
+
+def pamyatnye_suite():
+    """Годы памятных книжек: двойной том и полнота разбиения.
+
+    «Памятная книжка на 1893-1894 год» — одна книга за два года, и
+    первый прогон разреза назвал 1894-й ненайденным, хотя он лежит под
+    той же обложкой. Отсюда `years_covered` и эта проверка.
+    """
+    bad = 0
+    print("\nпамятные книжки по годам:")
+    cases = [
+        ("Памятная книжка Области войска Донского: на 1893-1894 год",
+         [1893, 1894]),
+        ("Памятная книжка Области войска Донского: на 1885 год", [1885]),
+        ("[Приказы по войску Донскому]: [за 1873 год]", [1873]),
+        # Подшивка целиком — не том за полвека: разворачивать нечего.
+        ("Памятная книжка Области войска Донского: на 1866-1916 годы", [1866]),
+        ("Донской календарь: без года", []),
+    ]
+    for title, expected in cases:
+        got = years_covered(title)
+        bad += got != expected
+        print(f"  [{'ok ' if got == expected else 'FAIL'}] {title[:46]!r:50}"
+              f" -> {got}")
+
+    # Разряды должны покрывать промежуток целиком и не пересекаться:
+    # иначе год, выпавший из всех, читается как «источника нет», а он
+    # есть. Проверяется на живом documents.json — его и читают глазами.
+    import json as _json
+    from docstore import ROOT
+    doc = _json.loads((ROOT / "documents.json").read_text(encoding="utf-8"))
+    pk = doc.get("памятные_книжки_по_годам")
+    if not pk:
+        bad += 1
+        print("  [FAIL] разреза по годам нет в documents.json")
+    else:
+        parts = [pk[k] for k in ("просмотрены", "в_очереди",
+                                 "проверены_яндекс_архивом", "нет_нигде")]
+        union = set().union(*(set(x) for x in parts))
+        total = sum(len(x) for x in parts)
+        span = set(range(min(union), max(union) + 1))
+        checks = [("промежуток покрыт целиком", union == span),
+                  ("разряды не пересекаются", total == len(union)),
+                  ("книга есть — года нет в «нет нигде»",
+                   not (set(pk["нет_нигде"]) & set(pk["есть_в_библиотеке"])))]
+        for name, ok in checks:
+            bad += not ok
+            print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
     return bad
 
 

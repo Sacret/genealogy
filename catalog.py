@@ -260,6 +260,23 @@ def year(title: str):
     return int(m.group(1)) if m else None
 
 
+def years_covered(title: str) -> list:
+    """Годы, которые том закрывает: «на 1893-1894 год» — это два года.
+
+    `year` берёт первый и тем задаёт место документа в списке, а здесь
+    важно другое: назвать 1894-й ненайденным было бы неправдой, раз он
+    напечатан под одной обложкой с 1893-м. Разворачивается только
+    короткий промежуток: «на 1866-1916» в заглавии подшивки — это не том
+    за полвека, а описание серии.
+    """
+    m = re.search(r"(?:за|на)\s*\[?(\d{4})(?:\s*[-–—]\s*(\d{4}))?", title)
+    if not m:
+        return []
+    lo = int(m.group(1))
+    hi = int(m.group(2) or lo)
+    return list(range(lo, hi + 1)) if lo <= hi <= lo + 5 else [lo]
+
+
 def checked_elsewhere(title: str):
     """Проверено помимо этого конвейера — и чем именно."""
     if PAMYATNAYA.search(title) and year(title) in YANDEX_PAMYATNYE_YEARS:
@@ -378,6 +395,42 @@ def build(catalog: dict) -> dict:
         "в_очереди": todo,
         "не_найдены_в_каталоге": [y for y in span
                                   if y not in done and y not in todo],
+    }
+
+    # Памятные книжки — вторая сплошная серия после приказов, и вопрос к
+    # ней тот же: какие годы закрыты, какие нет. Но считается она иначе.
+    # Большую часть подшивки закрывает поиск Яндекс.Архива, и такие тома
+    # сюда не берутся вовсе (`checked_elsewhere`), так что «нет в очереди»
+    # для них означает «уже проверено», а не «пропущено». Поэтому годы
+    # разложены по источникам: библиотека ДГПБ отвечает на вопрос «какие
+    # есть», а последний разряд — на вопрос «каких не хватает», и в нём
+    # остаются годы, которых нет ни там, ни там.
+    have, seen, queued, elsewhere = set(), set(), set(), set()
+    for ident, cached in sorted(catalog.items()):
+        title = cached.get("title") or ""
+        if not PAMYATNAYA.search(title):
+            continue
+        ys = years_covered(title)
+        have.update(ys)
+        if load_meta(ident) and latest_verdicts(ident):
+            seen.update(ys)
+        elif checked_elsewhere(title):
+            # Том закрыт Яндексом целиком, вместе со вторым годом под той
+            # же обложкой: список годов там составлен по заглавиям, и
+            # «1893» в нём — это та же книжка «на 1893-1894 год».
+            elsewhere.update(ys)
+        else:
+            queued.update(ys)
+    known = have | YANDEX_PAMYATNYE_YEARS
+    span = range(min(known), max(known) + 1) if known else []
+    checked = {y for y in span
+               if y in YANDEX_PAMYATNYE_YEARS or y in elsewhere} - seen - queued
+    out["памятные_книжки_по_годам"] = {
+        "есть_в_библиотеке": sorted(have),
+        "просмотрены": sorted(seen),
+        "в_очереди": sorted(queued),
+        "проверены_яндекс_архивом": sorted(checked),
+        "нет_нигде": [y for y in span if y not in seen | queued | checked],
     }
     return out
 

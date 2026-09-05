@@ -90,7 +90,7 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 }
 #filter:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-.doc { margin-bottom: 34px; }
+.doc { position: relative; margin-bottom: 34px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
 .doc .meta { color: var(--dim); font-size: 13px; margin-bottom: 8px; }
 .cov { font-size: 12.5px; color: var(--dim); margin-bottom: 12px;
@@ -196,6 +196,31 @@ a.year:hover { border-color: var(--accent); }
 /* Пустая метка года перед первым делом этого года: цель ссылки из полосы.
    Отступ сверху — чтобы заголовок дела не прилипал к краю окна. */
 .year-mark { height: 0; scroll-margin-top: 16px; }
+
+/* Видимая метка года у первого дела этого года — отдельно от якоря:
+   якорь лежит снаружи секции, чтобы ссылка из полосы работала и при
+   включённом фильтре, а надпись стоит внутри и вместе с секцией
+   исчезает — иначе год висел бы над пустотой.
+   Годы в журнале идут подряд, но заголовки дел названы книгами, а не
+   годами, и на прокрутке ряд карточек читается как сплошной. Надпись
+   размечает его на годы: в узком окне — строкой над делом, на широком
+   экране — в пустом поле слева от колонки, где она ничего не двигает. */
+.year-tag {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+  color: var(--dim); font-size: 12px; font-weight: 600;
+  letter-spacing: .1em; font-variant-numeric: tabular-nums;
+}
+.year-tag::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+/* Поле слева существует, только когда колонка (1000px) и поля тела
+   разошлись достаточно широко: при 1180px до края окна остаётся ещё
+   с десяток пикселей, ниже — метка обрезалась бы. */
+@media (min-width: 1180px) {
+  .year-tag {
+    display: block; position: absolute; left: -76px; top: 3px; width: 60px;
+    margin: 0; text-align: right; font-size: 13px; letter-spacing: .04em;
+  }
+  .year-tag::after { display: none; }
+}
 .years-note { color: var(--dim); font-size: 12.5px; margin: 0 0 26px;
               max-width: 80ch; }
 
@@ -663,10 +688,15 @@ def render(docs) -> str:
         meta, rows = d["meta"], d["rows"]
         title = meta.get("title") or ident
         url = meta.get("url", "")
-        if d.get("year") and d["year"] != seen_year:
+        starts_year = bool(d.get("year")) and d["year"] != seen_year
+        if starts_year:
             seen_year = d["year"]
             out.append(f"<div class=year-mark id='{year_anchor(seen_year)}'></div>")
         out.append(f"<section class=doc id='{e(ident)}'>")
+        # Год уже назван в строке под заголовком, так что метка — чистая
+        # навигация глазом, и читалке её повторять незачем.
+        if starts_year:
+            out.append(f"<div class=year-tag aria-hidden=true>{seen_year}</div>")
         out.append(f"<h2>{e(title)}</h2>")
         bits = [f"<code>{e(ident)}</code>"]
         if d.get("year"):

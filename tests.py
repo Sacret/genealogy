@@ -366,6 +366,24 @@ def years_suite():
     if "<i class=more>" in single:
         bad += 1
         print("  [FAIL] одиночный год помечен цифрой")
+
+    # Надпись с годом стоит у первого дела года и внутри секции: под
+    # фильтром секция прячется, и год должен уйти вместе с ней, чтобы не
+    # висеть над пустотой. Якорь для ссылки из полосы — наоборот, снаружи
+    # секции, и потому переживает фильтр.
+    html = render({"a": _doc(1873, "absent"), "b": _doc(1874, "absent"),
+                   "c": _doc(1874, "found")})
+    checks = [
+        ("год назван раз на год", html.count("class=year-tag") == 2),
+        ("надпись внутри секции",
+         "<section class=doc id='b'>\n<div class=year-tag aria-hidden=true>1874"
+         in html),
+        ("якорь остаётся снаружи",
+         html.index("id='g1874'") < html.index("<section class=doc id='b'>")),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
     return bad
 
 

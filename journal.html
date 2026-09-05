@@ -51,7 +51,7 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 }
 #filter:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-.doc { margin-bottom: 34px; }
+.doc { position: relative; margin-bottom: 34px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
 .doc .meta { color: var(--dim); font-size: 13px; margin-bottom: 8px; }
 .cov { font-size: 12.5px; color: var(--dim); margin-bottom: 12px;
@@ -157,6 +157,31 @@ a.year:hover { border-color: var(--accent); }
 /* Пустая метка года перед первым делом этого года: цель ссылки из полосы.
    Отступ сверху — чтобы заголовок дела не прилипал к краю окна. */
 .year-mark { height: 0; scroll-margin-top: 16px; }
+
+/* Видимая метка года у первого дела этого года — отдельно от якоря:
+   якорь лежит снаружи секции, чтобы ссылка из полосы работала и при
+   включённом фильтре, а надпись стоит внутри и вместе с секцией
+   исчезает — иначе год висел бы над пустотой.
+   Годы в журнале идут подряд, но заголовки дел названы книгами, а не
+   годами, и на прокрутке ряд карточек читается как сплошной. Надпись
+   размечает его на годы: в узком окне — строкой над делом, на широком
+   экране — в пустом поле слева от колонки, где она ничего не двигает. */
+.year-tag {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+  color: var(--dim); font-size: 12px; font-weight: 600;
+  letter-spacing: .1em; font-variant-numeric: tabular-nums;
+}
+.year-tag::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+/* Поле слева существует, только когда колонка (1000px) и поля тела
+   разошлись достаточно широко: при 1180px до края окна остаётся ещё
+   с десяток пикселей, ниже — метка обрезалась бы. */
+@media (min-width: 1180px) {
+  .year-tag {
+    display: block; position: absolute; left: -76px; top: 3px; width: 60px;
+    margin: 0; text-align: right; font-size: 13px; letter-spacing: .04em;
+  }
+  .year-tag::after { display: none; }
+}
 .years-note { color: var(--dim); font-size: 12.5px; margin: 0 0 26px;
               max-width: 80ch; }
 
@@ -185,6 +210,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 <input id=filter type=search placeholder='Фильтр по фамилии, документу или странице…' autocomplete=off>
 <div class=year-mark id='g1867'></div>
 <section class=doc id='bv0000387'>
+<div class=year-tag aria-hidden=true>1867</div>
 <h2>[Приказы по войску Донскому]: [за 1867 год]</h2>
 <div class=meta><b>1867</b> · <code>bv0000387</code> · <a href='https://vivaldi.dspl.ru/bv0000387/view/' target=_blank>https://vivaldi.dspl.ru/bv0000387</a> · 248 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 77%</span> 190 стр. распознаны надёжно, 58 — нет (из них 58 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -207,6 +233,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1868'></div>
 <section class=doc id='bv0000389'>
+<div class=year-tag aria-hidden=true>1868</div>
 <h2>[Приказы по войску Донскому]: [за 1868 год]</h2>
 <div class=meta><b>1868</b> · <code>bv0000389</code> · <a href='https://vivaldi.dspl.ru/bv0000389/view/' target=_blank>https://vivaldi.dspl.ru/bv0000389</a> · 278 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 79%</span> 220 стр. распознаны надёжно, 58 — нет (из них 58 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -229,6 +256,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1873'></div>
 <section class=doc id='bv0000386'>
+<div class=year-tag aria-hidden=true>1873</div>
 <h2>[Приказы по войску Донскому]: [за 1873 год]</h2>
 <div class=meta><b>1873</b> · <code>bv0000386</code> · <a href='https://vivaldi.dspl.ru/bv0000386/view/' target=_blank>https://vivaldi.dspl.ru/bv0000386</a> · 441 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 71%</span> 315 стр. распознаны надёжно, 126 — нет (из них 126 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -251,6 +279,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1874'></div>
 <section class=doc id='bv0000388'>
+<div class=year-tag aria-hidden=true>1874</div>
 <h2>[Приказы по войску Донскому]: [за 1874 год]</h2>
 <div class=meta><b>1874</b> · <code>bv0000388</code> · <a href='https://vivaldi.dspl.ru/bv0000388/view/' target=_blank>https://vivaldi.dspl.ru/bv0000388</a> · 150 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 61%</span> 91 стр. распознаны надёжно, 59 — нет (из них 59 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -273,6 +302,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1876'></div>
 <section class=doc id='bv0000395'>
+<div class=year-tag aria-hidden=true>1876</div>
 <h2>[Приказы по войску Донскому]: [за 1876 год]</h2>
 <div class=meta><b>1876</b> · <code>bv0000395</code> · <a href='https://vivaldi.dspl.ru/bv0000395/view/' target=_blank>https://vivaldi.dspl.ru/bv0000395</a> · 513 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 74%</span> 379 стр. распознаны надёжно, 134 — нет (из них 134 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -295,6 +325,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1877'></div>
 <section class=doc id='bv0000396'>
+<div class=year-tag aria-hidden=true>1877</div>
 <h2>[Приказы по войску Донскому]: [за 1877 год]</h2>
 <div class=meta><b>1877</b> · <code>bv0000396</code> · <a href='https://vivaldi.dspl.ru/bv0000396/view/' target=_blank>https://vivaldi.dspl.ru/bv0000396</a> · 349 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 47%</span> 164 стр. распознаны надёжно, 185 — нет (из них 185 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -317,6 +348,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1880'></div>
 <section class=doc id='bv0000390'>
+<div class=year-tag aria-hidden=true>1880</div>
 <h2>[Приказы по войску Донскому]: [за 1880 год]</h2>
 <div class=meta><b>1880</b> · <code>bv0000390</code> · <a href='https://vivaldi.dspl.ru/bv0000390/view/' target=_blank>https://vivaldi.dspl.ru/bv0000390</a> · 713 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 24%</span> 174 стр. распознаны надёжно, 539 — нет (из них 539 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -339,6 +371,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1881'></div>
 <section class=doc id='bv0000048'>
+<div class=year-tag aria-hidden=true>1881</div>
 <h2>Донской календарь: на 1881 год</h2>
 <div class=meta><b>1881</b> · <code>bv0000048</code> · <a href='https://vivaldi.dspl.ru/bv0000048/view/' target=_blank>https://vivaldi.dspl.ru/bv0000048</a> · 298 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 73%</span> 217 стр. распознаны надёжно, 81 — нет (из них 81 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -371,6 +404,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1882'></div>
 <section class=doc id='bv0000398'>
+<div class=year-tag aria-hidden=true>1882</div>
 <h2>[Приказы по войску Донскому]: [за 1882 год]</h2>
 <div class=meta><b>1882</b> · <code>bv0000398</code> · <a href='https://vivaldi.dspl.ru/bv0000398/view/' target=_blank>https://vivaldi.dspl.ru/bv0000398</a> · 458 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 56%</span> 255 стр. распознаны надёжно, 203 — нет (из них 203 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -393,6 +427,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1883'></div>
 <section class=doc id='bv0000399'>
+<div class=year-tag aria-hidden=true>1883</div>
 <h2>[Приказы по войску Донскому]: [за 1883 год]</h2>
 <div class=meta><b>1883</b> · <code>bv0000399</code> · <a href='https://vivaldi.dspl.ru/bv0000399/view/' target=_blank>https://vivaldi.dspl.ru/bv0000399</a> · 533 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 54%</span> 286 стр. распознаны надёжно, 247 — нет (из них 247 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -415,6 +450,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1884'></div>
 <section class=doc id='bv0000400'>
+<div class=year-tag aria-hidden=true>1884</div>
 <h2>[Приказы по войску Донскому]: [за 1884 год]</h2>
 <div class=meta><b>1884</b> · <code>bv0000400</code> · <a href='https://vivaldi.dspl.ru/bv0000400/view/' target=_blank>https://vivaldi.dspl.ru/bv0000400</a> · 635 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 69%</span> 439 стр. распознаны надёжно, 196 — нет (из них 196 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -437,6 +473,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1887'></div>
 <section class=doc id='bv0000049'>
+<div class=year-tag aria-hidden=true>1887</div>
 <h2>Донско-Азовский календарь: на 1887 год</h2>
 <div class=meta><b>1887</b> · <code>bv0000049</code> · <a href='https://vivaldi.dspl.ru/bv0000049/view/' target=_blank>https://vivaldi.dspl.ru/bv0000049</a> · 194 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 76%</span> 148 стр. распознаны надёжно, 46 — нет (из них 46 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -496,6 +533,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1888'></div>
 <section class=doc id='bv0000392'>
+<div class=year-tag aria-hidden=true>1888</div>
 <h2>[Приказы по войску Донскому]: [за 1888 год]</h2>
 <div class=meta><b>1888</b> · <code>bv0000392</code> · <a href='https://vivaldi.dspl.ru/bv0000392/view/' target=_blank>https://vivaldi.dspl.ru/bv0000392</a> · 465 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 57%</span> 263 стр. распознаны надёжно, 202 — нет (из них 202 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -518,6 +556,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1889'></div>
 <section class=doc id='bv0000188'>
+<div class=year-tag aria-hidden=true>1889</div>
 <h2>[Приказы по войску Донскому]: [за 1889 год]</h2>
 <div class=meta><b>1889</b> · <code>bv0000188</code> · <a href='https://vivaldi.dspl.ru/bv0000188/view/' target=_blank>https://vivaldi.dspl.ru/bv0000188</a> · 525 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 69%</span> 361 стр. распознаны надёжно, 164 — нет (из них 164 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -554,6 +593,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1891'></div>
 <section class=doc id='bv0000402'>
+<div class=year-tag aria-hidden=true>1891</div>
 <h2>[Приказы по войску Донскому]: [за 1891 год]</h2>
 <div class=meta><b>1891</b> · <code>bv0000402</code> · <a href='https://vivaldi.dspl.ru/bv0000402/view/' target=_blank>https://vivaldi.dspl.ru/bv0000402</a> · 663 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 33%</span> 216 стр. распознаны надёжно, 447 — нет (из них 447 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -576,6 +616,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1892'></div>
 <section class=doc id='bv0000403'>
+<div class=year-tag aria-hidden=true>1892</div>
 <h2>[Приказы по войску Донскому]: [за 1892 год]</h2>
 <div class=meta><b>1892</b> · <code>bv0000403</code> · <a href='https://vivaldi.dspl.ru/bv0000403/view/' target=_blank>https://vivaldi.dspl.ru/bv0000403</a> · 740 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 60%</span> 445 стр. распознаны надёжно, 295 — нет (из них 295 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -598,6 +639,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1893'></div>
 <section class=doc id='bv0000189'>
+<div class=year-tag aria-hidden=true>1893</div>
 <h2>[Приказы по войску Донскому]: [за 1893 год]</h2>
 <div class=meta><b>1893</b> · <code>bv0000189</code> · <a href='https://vivaldi.dspl.ru/bv0000189/view/' target=_blank>https://vivaldi.dspl.ru/bv0000189</a> · 965 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 71%</span> 687 стр. распознаны надёжно, 278 — нет (из них 278 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -620,6 +662,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1894'></div>
 <section class=doc id='bv0000404'>
+<div class=year-tag aria-hidden=true>1894</div>
 <h2>[Приказы по войску Донскому]: [за 1894 год]</h2>
 <div class=meta><b>1894</b> · <code>bv0000404</code> · <a href='https://vivaldi.dspl.ru/bv0000404/view/' target=_blank>https://vivaldi.dspl.ru/bv0000404</a> · 808 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 62%</span> 498 стр. распознаны надёжно, 310 — нет (из них 310 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -642,6 +685,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1895'></div>
 <section class=doc id='bv0000405'>
+<div class=year-tag aria-hidden=true>1895</div>
 <h2>[Приказы по войску Донскому]: [за 1895 год]</h2>
 <div class=meta><b>1895</b> · <code>bv0000405</code> · <a href='https://vivaldi.dspl.ru/bv0000405/view/' target=_blank>https://vivaldi.dspl.ru/bv0000405</a> · 957 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 54%</span> 518 стр. распознаны надёжно, 439 — нет (из них 439 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -664,6 +708,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1896'></div>
 <section class=doc id='bv0000406'>
+<div class=year-tag aria-hidden=true>1896</div>
 <h2>[Приказы по войску Донскому]: [за 1896 год]</h2>
 <div class=meta><b>1896</b> · <code>bv0000406</code> · <a href='https://vivaldi.dspl.ru/bv0000406/view/' target=_blank>https://vivaldi.dspl.ru/bv0000406</a> · 705 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 51%</span> 363 стр. распознаны надёжно, 342 — нет (из них 342 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -686,6 +731,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1897'></div>
 <section class=doc id='bv0000407'>
+<div class=year-tag aria-hidden=true>1897</div>
 <h2>[Приказы по войску Донскому]: за 1897 год</h2>
 <div class=meta><b>1897</b> · <code>bv0000407</code> · <a href='https://vivaldi.dspl.ru/bv0000407/view/' target=_blank>https://vivaldi.dspl.ru/bv0000407</a> · 714 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>не измерено</span> сканы вычищены — для замера надёжности их нужно дотянуть заново.</div>
@@ -708,6 +754,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1898'></div>
 <section class=doc id='bv0000206'>
+<div class=year-tag aria-hidden=true>1898</div>
 <h2>[Приказы по войску Донскому]: за 1898 год</h2>
 <div class=meta><b>1898</b> · <code>bv0000206</code> · <a href='https://vivaldi.dspl.ru/bv0000206/view/' target=_blank>https://vivaldi.dspl.ru/bv0000206</a> · 645 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 83%</span> 537 стр. распознаны надёжно, 108 — нет (из них 108 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -736,6 +783,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1899'></div>
 <section class=doc id='bv0000029'>
+<div class=year-tag aria-hidden=true>1899</div>
 <h2>Вся Область войска Донского: адрес-календарная, торгово-промышленная, справочная книга: на 1899 год</h2>
 <div class=meta><b>1899</b> · <code>bv0000029</code> · <a href='https://vivaldi.dspl.ru/bv0000029/view/' target=_blank>https://vivaldi.dspl.ru/bv0000029</a> · 644 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 62%</span> 399 стр. распознаны надёжно, 245 — нет (из них 245 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -779,6 +827,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1900'></div>
 <section class=doc id='bv0000030'>
+<div class=year-tag aria-hidden=true>1900</div>
 <h2>Вся Область войска Донского: адрес-календарная, торгово-промышленная, справочная книга: на 1900 год</h2>
 <div class=meta><b>1900</b> · <code>bv0000030</code> · <a href='https://vivaldi.dspl.ru/bv0000030/view/' target=_blank>https://vivaldi.dspl.ru/bv0000030</a> · 586 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 63%</span> 370 стр. распознаны надёжно, 216 — нет (из них 216 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -836,6 +885,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1901'></div>
 <section class=doc id='bv0000031'>
+<div class=year-tag aria-hidden=true>1901</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1901 год</h2>
 <div class=meta><b>1901</b> · <code>bv0000031</code> · <a href='https://vivaldi.dspl.ru/bv0000031/view/' target=_blank>https://vivaldi.dspl.ru/bv0000031</a> · 725 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 25%</span> 180 стр. распознаны надёжно, 545 — нет (из них 545 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -893,6 +943,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1902'></div>
 <section class=doc id='bv0000032'>
+<div class=year-tag aria-hidden=true>1902</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1902 год</h2>
 <div class=meta><b>1902</b> · <code>bv0000032</code> · <a href='https://vivaldi.dspl.ru/bv0000032/view/' target=_blank>https://vivaldi.dspl.ru/bv0000032</a> · 677 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 60%</span> 404 стр. распознаны надёжно, 273 — нет (из них 273 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -948,6 +999,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1903'></div>
 <section class=doc id='bv0000034'>
+<div class=year-tag aria-hidden=true>1903</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: [на 1903 год]</h2>
 <div class=meta><b>1903</b> · <code>bv0000034</code> · <a href='https://vivaldi.dspl.ru/bv0000034/view/' target=_blank>https://vivaldi.dspl.ru/bv0000034</a> · 659 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 62%</span> 410 стр. распознаны надёжно, 249 — нет (из них 249 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -991,6 +1043,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1904'></div>
 <section class=doc id='bv0000036'>
+<div class=year-tag aria-hidden=true>1904</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1904 год</h2>
 <div class=meta><b>1904</b> · <code>bv0000036</code> · <a href='https://vivaldi.dspl.ru/bv0000036/view/' target=_blank>https://vivaldi.dspl.ru/bv0000036</a> · 828 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 63%</span> 519 стр. распознаны надёжно, 309 — нет (из них 309 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1044,6 +1097,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1905'></div>
 <section class=doc id='bv0000033'>
+<div class=year-tag aria-hidden=true>1905</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1905 год</h2>
 <div class=meta><b>1905</b> · <code>bv0000033</code> · <a href='https://vivaldi.dspl.ru/bv0000033/view/' target=_blank>https://vivaldi.dspl.ru/bv0000033</a> · 678 стр. · 400 dpi</div>
 <div class=cov><span class='badge no'>читаемо 46%</span> 312 стр. распознаны надёжно, 366 — нет (из них 366 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1093,6 +1147,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1906'></div>
 <section class=doc id='bv0000409'>
+<div class=year-tag aria-hidden=true>1906</div>
 <h2>[Приказы по войску Донскому]: [за 1906 год]</h2>
 <div class=meta><b>1906</b> · <code>bv0000409</code> · <a href='https://vivaldi.dspl.ru/bv0000409/view/' target=_blank>https://vivaldi.dspl.ru/bv0000409</a> · 691 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 61%</span> 419 стр. распознаны надёжно, 272 — нет (из них 272 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1115,6 +1170,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1907'></div>
 <section class=doc id='bv0000035'>
+<div class=year-tag aria-hidden=true>1907</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1907 год</h2>
 <div class=meta><b>1907</b> · <code>bv0000035</code> · <a href='https://vivaldi.dspl.ru/bv0000035/view/' target=_blank>https://vivaldi.dspl.ru/bv0000035</a> · 366 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 74%</span> 272 стр. распознаны надёжно, 94 — нет (из них 94 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1164,6 +1220,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1908'></div>
 <section class=doc id='bv0000040'>
+<div class=year-tag aria-hidden=true>1908</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1908 год</h2>
 <div class=meta><b>1908</b> · <code>bv0000040</code> · <a href='https://vivaldi.dspl.ru/bv0000040/view/' target=_blank>https://vivaldi.dspl.ru/bv0000040</a> · 555 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 79%</span> 441 стр. распознаны надёжно, 114 — нет (из них 114 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1217,6 +1274,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1909'></div>
 <section class=doc id='bv0000039'>
+<div class=year-tag aria-hidden=true>1909</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1909 год</h2>
 <div class=meta><b>1909</b> · <code>bv0000039</code> · <a href='https://vivaldi.dspl.ru/bv0000039/view/' target=_blank>https://vivaldi.dspl.ru/bv0000039</a> · 616 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 84%</span> 516 стр. распознаны надёжно, 100 — нет (из них 100 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1274,6 +1332,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1910'></div>
 <section class=doc id='bv0000043'>
+<div class=year-tag aria-hidden=true>1910</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1910 год</h2>
 <div class=meta><b>1910</b> · <code>bv0000043</code> · <a href='https://vivaldi.dspl.ru/bv0000043/view/' target=_blank>https://vivaldi.dspl.ru/bv0000043</a> · 764 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 77%</span> 589 стр. распознаны надёжно, 175 — нет (из них 175 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1343,6 +1402,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1911'></div>
 <section class=doc id='bv0000042'>
+<div class=year-tag aria-hidden=true>1911</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1911 год</h2>
 <div class=meta><b>1911</b> · <code>bv0000042</code> · <a href='https://vivaldi.dspl.ru/bv0000042/view/' target=_blank>https://vivaldi.dspl.ru/bv0000042</a> · 768 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 74%</span> 568 стр. распознаны надёжно, 200 — нет (из них 200 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1408,6 +1468,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1912'></div>
 <section class=doc id='bv0000041'>
+<div class=year-tag aria-hidden=true>1912</div>
 <h2>Вся Донская область и Северный Кавказ: книга администрации, промышленности и торговли: на 1912 год</h2>
 <div class=meta><b>1912</b> · <code>bv0000041</code> · <a href='https://vivaldi.dspl.ru/bv0000041/view/' target=_blank>https://vivaldi.dspl.ru/bv0000041</a> · 687 стр. · 400 dpi</div>
 <div class=cov><span class='badge ok'>читаемо 87%</span> 595 стр. распознаны надёжно, 92 — нет (из них 92 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>
@@ -1461,6 +1522,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </tbody></table></details></section>
 <div class=year-mark id='g1913'></div>
 <section class=doc id='bv0000208'>
+<div class=year-tag aria-hidden=true>1913</div>
 <h2>[Приказы по войску Донскому]: за 1913 год</h2>
 <div class=meta><b>1913</b> · <code>bv0000208</code> · <a href='https://vivaldi.dspl.ru/bv0000208/view/' target=_blank>https://vivaldi.dspl.ru/bv0000208</a> · 862 стр. · 400 dpi</div>
 <div class=cov><span class='badge wait'>читаемо 82%</span> 708 стр. распознаны надёжно, 154 — нет (из них 154 перечитаны полосами). «Не найдена» на ненадёжной странице не гарантирует отсутствия.</div>

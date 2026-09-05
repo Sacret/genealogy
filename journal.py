@@ -15,7 +15,7 @@ import re
 from collections import OrderedDict
 
 from docstore import (ROOT, documents, latest_verdicts, load_meta,
-                      persons as roster, read_log)
+                      meta_year, persons as roster, read_log)
 
 STATUS = {
     "found":   ("найдена",      "ok"),
@@ -432,19 +432,6 @@ def markup(text: str, known=(), skip=None) -> str:
                    for p in BREAK.split(text.strip()) if p.strip())
 
 
-def doc_year(meta) -> int | None:
-    """Год документа из заголовка: «[Приказы ...]: [за 1873 год]» -> 1873.
-
-    Годы нужны затем, что документы называются bv0000386, bv0000392,
-    bv0000407 — и номер дела в библиотеке не имеет ничего общего с
-    хронологией: 407 это 1897 год, а 392 — 1888. Отсортированный по
-    номерам журнал перемешивает эпохи и прячет главное, ради чего он
-    читается: за какие годы уже смотрели.
-    """
-    m = re.search(r"\b(1[6-9]\d{2})\b", meta.get("title") or "")
-    return int(m.group(1)) if m else None
-
-
 def _page_key(p):
     """Номера страниц идут по-числовому: '99' раньше '104', а не наоборот."""
     return (0, int(p)) if str(p).isdigit() else (1, 0, str(p))
@@ -667,7 +654,7 @@ def collect():
         if rows or meta:
             docs[ident] = {"meta": meta, "rows": rows,
                            "coverage": coverage(ident),
-                           "year": doc_year(meta)}
+                           "year": meta_year(meta)}
     # По году, а не по номеру дела: 407 это 1897-й, а 392 — 1888-й.
     # Дела без года в заголовке уходят в конец, порядок между ними прежний.
     return OrderedDict(sorted(docs.items(),

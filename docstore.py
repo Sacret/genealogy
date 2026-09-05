@@ -64,6 +64,26 @@ def load_meta(ident: str) -> dict:
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 
 
+# Год документа: сначала поле `год` в meta.json, потом заголовок.
+#
+# Год нужен затем, что номер дела в библиотеке хронологии не знает —
+# bv0000407 это 1897-й, а bv0000392 — 1888-й, — и журнал раскладывает
+# документы по годам, а не по номерам. Обычно год стоит в заголовке
+# («...на 1893 год»), и его оттуда и берут. Но справочники без года на
+# обложке существуют: «Новочеркасск: справочная книжка» датируется
+# только по содержанию — по цензурному разрешению и по тому, кто в ней
+# назван в должности. Такой год проставляется в meta.json руками, и он
+# главнее заголовка: заголовок о годе просто молчит.
+YEAR = re.compile(r"\b(1[6-9]\d\d)\b")
+
+
+def meta_year(meta: dict) -> int | None:
+    if meta.get("год"):
+        return int(meta["год"])
+    m = YEAR.search(meta.get("title") or "")
+    return int(m.group(1)) if m else None
+
+
 def save_meta(ident: str, **fields) -> dict:
     d = doc_dir(ident)
     d.mkdir(parents=True, exist_ok=True)

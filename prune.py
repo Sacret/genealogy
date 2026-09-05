@@ -22,7 +22,7 @@ import subprocess
 import sys
 
 from docstore import (ROOT, doc_dir, documents, latest_verdicts, load_meta,
-                      read_log, save_meta)
+                      meta_year, read_log, save_meta)
 
 
 # Ссылка на другой документ: "тот же человек, что в bv0000386 стр. 208".
@@ -114,14 +114,14 @@ def finding_pages() -> dict:
     for ident in documents():
         meta = load_meta(ident)
         total = meta.get("pages")
-        year = re.search(r"\b(1[6-9]\d\d)\b", meta.get("title", ""))
+        year = meta_year(meta)
         for surname, rec in sorted(latest_verdicts(ident).items()):
             if rec.get("status") != "found":
                 continue
             kin = {str(p) for p in (rec.get("kin") or [])}
             for page in confirmed_pages(rec, total):
                 path = f"{ident}/scans/p{page:04d}.jpg"
-                note = f"{year.group(1) + ', ' if year else ''}{surname}"
+                note = f"{str(year) + ', ' if year else ''}{surname}"
                 if str(page) in kin:
                     note += ", родство подтверждено"
                 out.setdefault(path, note)

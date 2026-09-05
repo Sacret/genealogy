@@ -28,7 +28,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-from docstore import ROOT, UA, latest_verdicts, load_meta
+from docstore import ROOT, UA, latest_verdicts, load_meta, meta_year
 
 CATALOG = ROOT / "catalog.jsonl"
 DOCUMENTS = ROOT / "documents.json"
@@ -338,19 +338,23 @@ def build(catalog: dict) -> dict:
             continue
 
         rec = {"id": ident, "url": f"{LIBRARY}/{ident}/view/", "title": title}
-        y = year(title)
+        # У скачанного тома год мог быть проставлен руками в meta.json —
+        # заголовки вроде «Новочеркасск: справочная книжка» о нём молчат,
+        # и без этого документ выпадал бы из хронологии и здесь, и в журнале.
+        meta = load_meta(ident)
+        y = meta_year({**meta, "title": title})
         if y:
             rec["год"] = y
         if ident in POOR_SCAN:
             rec["качество"] = POOR_SCAN[ident]
 
-        verdicts = latest_verdicts(ident) if load_meta(ident) else {}
+        verdicts = latest_verdicts(ident) if meta else {}
         if verdicts:
             rec["вердикты"] = {s: v.get("status", "unclear")
                                for s, v in verdicts.items()}
             out["просмотрены"].append(rec)
             continue
-        if load_meta(ident):
+        if meta:
             out["в_работе"].append(rec)
             continue
 

@@ -90,6 +90,8 @@ def find_in_text(text: str, surname: str, page: str = "-",
         ))
     results.extend(_find_after_break(original, stem, fragile, page,
                                      threshold, context_chars))
+    results.extend(_find_line_joins(original, stem, fragile, page,
+                                    threshold, context_chars))
     results.extend(_find_hyphen_starts(original, stem, fragile, page,
                                        context_chars, min_fragment))
     results.sort(key=lambda r: (-r.score, r.start))
@@ -136,6 +138,68 @@ def _find_after_break(text, stem, fragile, page, threshold, context_chars):
             page=page, start=m.start(1), end=m.end(1), raw=m.group(1),
             cost=cost, score=sc,
             context=" ".join(text[lo:hi].split())))
+    return out
+
+
+def _find_line_joins(text, stem, fragile, page, threshold, context_chars):
+    """Слово, разорванное концом строки БЕЗ дефиса.
+
+    Перенос обычно помечен дефисом, и его склеивает dehyphenate. Но
+    дефис бывает не пропечатан или срезан сканированием, и тогда фамилия
+    лежит двумя кусками, между которыми только перевод строки. В
+    двухколоночном справочнике вдобавок мешает соседняя колонка: на
+    стр. 129 тома bv0000042 фельдшер Могучев набран как
+
+        ... Алекс. Іос. Мо
+        черкасской общины сестеръ ми- | гучевъ.
+
+    — правая колонка разорвана, а между её половинами затекла левая.
+    Перечитывание полосами тут не помогает: полоса идёт во всю ширину
+    страницы и склеивает колонки так же.
+
+    Поэтому обломок в конце строки пробуется склеить не только со
+    следующим словом, но с любым словом следующей строки. Сеть широкая,
+    но улов узкий: сравнение идёт с НАЧАЛА основы, так что склейка
+    проходит порог, только если обломок сам по себе — начало фамилии,
+    а хвост её дописывает. Пары с дефисом сюда не попадают: их уже
+    склеил dehyphenate.
+    """
+    out = []
+    lines = text.split("\n")
+    offset, starts = 0, []
+    for ln in lines:
+        starts.append(offset)
+        offset += len(ln) + 1
+    for i, line in enumerate(lines[:-1]):
+        tail_words = list(_TOKEN_RE.finditer(line))
+        if not tail_words:
+            continue
+        head_m = tail_words[-1]
+        if head_m.end() != len(line.rstrip()):
+            continue                      # обломок должен кончать строку
+        head = head_m.group()
+        # Фамилия в печати с прописной; без этого правило тонет в
+        # обычных словах, разорванных вёрсткой.
+        if not head[:1].isupper():
+            continue
+        nhead = normalize(head)
+        if not nhead or len(nhead) >= len(stem):
+            continue                      # целое слово ловится обычным путём
+        if prefix_distance(nhead, stem, fragile=fragile)[0] > PARTIAL_MAX_COST:
+            continue                      # обломок не похож на начало фамилии
+        for m in _TOKEN_RE.finditer(lines[i + 1]):
+            hit = _test_token(head + m.group(), stem, fragile, threshold)
+            if hit is None:
+                continue
+            cost, sc = hit
+            a = starts[i] + head_m.start()
+            b = starts[i + 1] + m.end()
+            lo, hi = max(0, a - context_chars), min(len(text), b + context_chars)
+            out.append(Match(
+                page=page, start=a, end=b, raw=head + m.group(),
+                cost=cost, score=sc,
+                context=" ".join(text[lo:hi].split())))
+            break                         # одного продолжения довольно
     return out
 
 

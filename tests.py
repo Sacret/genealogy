@@ -55,17 +55,18 @@ def main():
         detail = f" -> {hits[0].raw!r} cost={hits[0].cost}" if hits else ""
         print(f"  [{mark}] {text!r:36}{detail}")
 
+    bad_joins = join_checks()
     print(f"\nоснова 'Кузнецовъ'  -> {stem_query('Кузнецовъ')!r}")
     print(f"основа 'Кузнѣцова'  -> {stem_query('Кузнѣцова')!r}")
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
-    bad = (hyphen_suite() + spelling_suite() + catalog_suite()
+    bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
            + years_suite() + persons_suite() + doclinks_suite()
            + pagelist_suite()
            + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4)
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 2)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -89,7 +90,40 @@ CASES_HYPHEN = [
     ("сл. Мартынов-\nКармазинъ Ф. П., Азовскій баз.", "Кармазинъ", True),
     # Настоящий перенос при этом остаётся переносом, а не двумя словами.
     ("мѣщанинъ Кузне-\nцовъ Иванъ", "Кармазинъ", False),
+    # Разрыв БЕЗ дефиса, да ещё с затёкшей между половинами соседней
+    # колонкой. Реальный случай: bv0000042 стр. 129, «Алекс. Іос. Мо» /
+    # «...сестеръ ми- | гучевъ». Продолжение ищется среди слов следующей
+    # строки, а не только сразу за разрывом.
+    ("Алекс. Іос. Мо\nчеркасской общины сестеръ ми- | гучевъ.",
+     "Могучевъ", True),
+    ("Филиппъ Петр. Кар\nтамъ-же, Азовск. баз. | мазинъ", "Кармазинъ", True),
 ]
+
+
+
+def join_checks():
+    """Склейка через конец строки: смотрим на само склеенное слово.
+
+    Булев «нашлось / не нашлось» тут не годится: хвост 'гучевъ' проходит
+    порог и в одиночку, так что проверять надо, собралась ли фамилия
+    целиком. Заодно это проверяет условие на прописную букву — без него
+    правило склеивало бы обрывки обычных слов.
+    """
+    bad = 0
+    print("\nсклейка через конец строки:")
+    joined = [m.raw for m in find_in_text(
+        "Алекс. Іос. Мо\nчеркасской общины сестеръ ми- | гучевъ.", "Могучевъ")]
+    if "Могучевъ" not in joined:
+        bad += 1
+    print(f"  [{'ok ' if 'Могучевъ' in joined else 'FAIL'}] "
+          f"колонка между половинами -> {joined}")
+
+    lower = [m.raw for m in find_in_text(
+        "не мо\nгучевъ вовсе", "Могучевъ")]
+    ok = not any(len(r) > 6 for r in lower)      # 'могучевъ' склеиться не должно
+    bad += not ok
+    print(f"  [{'ok ' if ok else 'FAIL'}] обломок со строчной не склеен -> {lower}")
+    return bad
 
 
 def hyphen_suite():

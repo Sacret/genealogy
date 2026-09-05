@@ -14,8 +14,11 @@
 
 import argparse
 import json
+import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 from docstore import doc_dir, load_meta
@@ -62,8 +65,11 @@ def main():
 
     out = d / "ocr_bands"
     out.mkdir(exist_ok=True)
-    work = d / "_work"
-    work.mkdir(exist_ok=True)
+    # Свой каталог на процесс, а не общий `_work`: два прогона по одному
+    # документу (например, длинный фоновый и короткий по одной странице)
+    # чистили каталог друг другу, и длинный падал на полдороге с
+    # FileNotFoundError на своей же полосе.
+    work = pathlib.Path(tempfile.mkdtemp(prefix="bands-", dir=d))
 
     jobs = []
     for p in pages:
@@ -83,9 +89,7 @@ def main():
             fresh += not cached
             if i % 20 == 0:
                 print(f"  {i}/{len(jobs)}", file=sys.stderr)
-    for f in work.iterdir():
-        f.unlink()
-    work.rmdir()
+    shutil.rmtree(work, ignore_errors=True)
     print(f"готово: {len(jobs)} стр., заново {fresh}")
 
 

@@ -146,6 +146,9 @@ tr.hidden { display: none; }
           border-bottom: 1px dotted currentColor; }
 .person:hover { border-bottom-style: solid; }
 .sum-badge + .person { margin-right: 4px; }
+.doclink { color: var(--accent); text-decoration: none;
+           border-bottom: 1px dotted currentColor; white-space: nowrap; }
+.doclink:hover { border-bottom-style: solid; }
 .note { color: var(--dim); font-size: 13px; margin-top: 5px; max-width: 62ch; }
 /* Вердикт длинный, и в нём три разных голоса: мой пересказ, цитата из
    приказа и то, что автор выделил капслоком. Курсив и жирный разводят их
@@ -238,6 +241,19 @@ box.addEventListener('input', () => {
 document.querySelectorAll('summary .person').forEach(a => {
   a.addEventListener('click', e => e.stopPropagation());
 });
+
+// Таблицы свёрнуты, и ссылка на соседнее дело приводила бы к закрытой
+// карточке: пришли читать вердикт, а видно только заголовок. Поэтому
+// дело, на которое указывает якорь, раскрывается само — и при переходе
+// по ссылке, и при открытии страницы с готовым #bv0000386 в адресе.
+function openTarget() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  const sec = id && document.getElementById(id);
+  const det = sec && sec.querySelector('details.searches');
+  if (det) det.open = true;
+}
+addEventListener('hashchange', openTarget);
+openTarget();
 """
 
 
@@ -299,6 +315,12 @@ def plural(n, one, few, many):
 # знаков пропускал длинную выписку (bv0000407, стр. 494) и спаривал её
 # закрывающий апостроф со следующим открывающим, так что курсивом
 # оказывалась не цитата, а мой текст между двумя цитатами.
+# Вердикты постоянно ссылаются на соседние тома: «ТОТ ЖЕ ЧЕЛОВЕК, что в
+# bv0000386 (1873, стр. 208)». В журнале все дела лежат на одной странице,
+# так что такой номер — готовая ссылка на якорь соседней карточки, и
+# читать цепочку находок можно не листая глазами.
+DOC_ID = re.compile(r"\b(?:bv|ot)\d{7}\b")
+
 QUOTE = re.compile(r"«[^»]*»|'[^']*'")
 
 # Капслоком набирается только кириллица: латинские CAPS в вердиктах —
@@ -317,8 +339,21 @@ BREAK = re.compile(
     r"|Отклонен|Проверочные поиски|Режим --short|Сверены все|Счёт по)")
 
 
-def markup(text: str) -> str:
-    """Текст вердикта -> HTML: цитаты курсивом, капслок жирным, абзацы."""
+def markup(text: str, known=(), skip=None) -> str:
+    """Текст вердикта -> HTML: цитаты курсивом, капслок жирным, абзацы.
+
+    `known` — дела, которые есть на этой же странице: только их номера
+    становятся ссылками. Ссылка на якорь, которого нет, ведёт в никуда
+    и молча: лучше оставить номер текстом. `skip` — само это дело, на
+    себя ссылаться незачем.
+    """
+    def link(s):
+        """s уже экранирован: подставляем якоря в готовый HTML."""
+        return DOC_ID.sub(
+            lambda m: (f"<a class=doclink href='#{m.group()}'>{m.group()}</a>"
+                       if m.group() in known and m.group() != skip
+                       else m.group()), s)
+
     def inline(s):
         out, pos = [], 0
         for m in QUOTE.finditer(s):
@@ -328,7 +363,7 @@ def markup(text: str) -> str:
             # они только сорят.
             q = m.group()
             q = q[1:-1] if q[0] == "'" else q
-            out.append(f"<em>{e(q)}</em>")
+            out.append(f"<em>{link(e(q))}</em>")
             pos = m.end()
         out.append(caps(s[pos:]))
         return "".join(out)
@@ -336,10 +371,10 @@ def markup(text: str) -> str:
     def caps(s):
         out, pos = [], 0
         for m in CAPS.finditer(s):
-            out.append(e(s[pos:m.start()]))
+            out.append(link(e(s[pos:m.start()])))
             out.append(f"<strong>{e(m.group())}</strong>")
             pos = m.end()
-        out.append(e(s[pos:]))
+        out.append(link(e(s[pos:])))
         return "".join(out)
 
     return "".join(f"<p>{inline(p.strip())}</p>"
@@ -702,7 +737,8 @@ def render(docs) -> str:
             out.append(f"<td class=surname>{e(r['surname'])}</td>")
             out.append(f"<td class=num>{r['hits']}</td>")
             out.append(f"<td class=pages>{', '.join(links) or '—'}</td>")
-            note = (f"<div class=note>{markup(r['verdict'])}</div>"
+            note = (f"<div class=note>"
+                    f"{markup(r['verdict'], docs.keys(), ident)}</div>"
                     if r["verdict"] else "")
             shots = ""
             people = roster()

@@ -3,7 +3,7 @@
 
 import sys
 from catalog import classify
-from journal import render, year_strip
+from journal import markup, render, year_strip
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, kin_persons
 from surnamefind.search import find_in_text, stem_query
@@ -60,10 +60,11 @@ def main():
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
     bad = (hyphen_suite() + spelling_suite() + catalog_suite()
-           + years_suite() + persons_suite() + gitignore_suite())
+           + years_suite() + persons_suite() + doclinks_suite()
+           + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + len(CASES_YEARS)
-             + len(CASES_PERSONS))
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS))
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -247,6 +248,37 @@ def persons_suite():
         print("  [FAIL] однофамилец подписан именем родственника")
     if not bad:
         print("  [ok ] ссылка на родословную — в сводке, и только там")
+    return bad
+
+
+# Вердикт постоянно ссылается на соседние тома: «ТОТ ЖЕ ЧЕЛОВЕК, что в
+# bv0000386». В журнале они лежат на одной странице, и номер должен вести
+# на якорь карточки — но только тот, который на странице есть.
+CASES_DOCLINKS = [
+    ("соседнее дело — ссылка",
+     ("см. bv0000386 стр. 208", {"bv0000386"}, None),
+     "<a class=doclink href='#bv0000386'>bv0000386</a>"),
+    ("дела нет на странице — текстом",
+     ("см. bv0000999", {"bv0000386"}, None), "bv0000999"),
+    ("на себя не ссылаемся",
+     ("в этом же bv0000386", {"bv0000386"}, "bv0000386"), "bv0000386"),
+    ("номер внутри цитаты тоже ссылка",
+     ("«как в bv0000386»", {"bv0000386"}, None),
+     "<a class=doclink href='#bv0000386'>bv0000386</a>"),
+]
+
+
+def doclinks_suite():
+    bad = 0
+    print("\nссылки на соседние дела:")
+    for name, (text, known, skip), wanted in CASES_DOCLINKS:
+        html = markup(text, known, skip)
+        ok = wanted in html
+        # «текстом» значит именно текстом: якоря быть не должно.
+        if not wanted.startswith("<") and "class=doclink" in html:
+            ok = False
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name:34} -> {html}")
     return bad
 
 

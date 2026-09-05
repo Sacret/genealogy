@@ -36,6 +36,11 @@ def stem_query(surname: str):
 # ("Могу- к |"). Внутрисловный дефис без пробела ("Штабсъ-Капитаны")
 # под правило не подпадает.
 _HYPHEN_END = re.compile(r"([А-Яа-яЁёѢѣІіЇїѲѳѴѵA-Za-z]{2,})[-‐‑–](?=[ \t]*\n|[ \t]+)")
+# Слово, начинающее строку сразу после переноса: то самое, которое
+# склейка приклеивает к хвосту предыдущей строки.
+_AFTER_BREAK_RE = re.compile(
+    r"[-‐‑–\u00ad]\s*\n\s*([А-Яа-яЁёѢѣІіЇїѲѳѴѵЅѕѦѧѪѫA-Za-z]+)")
+
 PARTIAL_MAX_COST = 0.8
 MIN_FRAGMENT = 4        # короче — слишком слабое свидетельство для обычного поиска
 
@@ -68,30 +73,70 @@ def find_in_text(text: str, surname: str, page: str = "-",
     text = dehyphenate(text)
     results = []
     for m in _TOKEN_RE.finditer(text):
-        raw = m.group()
-        norm = normalize(raw)
-        if not norm:
+        hit = _test_token(m.group(), stem, fragile, threshold)
+        if hit is None:
             continue
-        # быстрый отсев: длина не может отличаться сильнее, чем порог
-        if len(norm) < len(stem) - threshold - 1:
-            continue
-        cost, _ = prefix_distance(stem, norm, fragile=fragile)
-        if cost <= threshold:
-            lo = max(0, m.start() - context_chars)
-            hi = min(len(text), m.end() + context_chars)
-            results.append(Match(
-                page=page,
-                start=m.start(),
-                end=m.end(),
-                raw=raw,
-                cost=round(cost, 2),
-                score=round(score(stem, norm, fragile=fragile), 3),
-                context=" ".join(text[lo:hi].split()),
-            ))
+        cost, sc = hit
+        lo = max(0, m.start() - context_chars)
+        hi = min(len(text), m.end() + context_chars)
+        results.append(Match(
+            page=page,
+            start=m.start(),
+            end=m.end(),
+            raw=m.group(),
+            cost=cost,
+            score=sc,
+            context=" ".join(text[lo:hi].split()),
+        ))
+    results.extend(_find_after_break(original, stem, fragile, page,
+                                     threshold, context_chars))
     results.extend(_find_hyphen_starts(original, stem, fragile, page,
                                        context_chars, min_fragment))
     results.sort(key=lambda r: (-r.score, r.start))
     return results
+
+
+def _test_token(raw: str, stem, fragile, threshold):
+    """(cost, score) для токена, если он проходит порог, иначе None."""
+    norm = normalize(raw)
+    if not norm:
+        return None
+    # быстрый отсев: длина не может отличаться сильнее, чем порог
+    if len(norm) < len(stem) - threshold - 1:
+        return None
+    cost, _ = prefix_distance(stem, norm, fragile=fragile)
+    if cost > threshold:
+        return None
+    return round(cost, 2), round(score(stem, norm, fragile=fragile), 3)
+
+
+def _find_after_break(text, stem, fragile, page, threshold, context_chars):
+    """Слово, стоящее сразу после переноса, — в том виде, что до склейки.
+
+    Склейка переносов права для одной колонки и вредна для двух: в
+    справочнике строка кончается переносом ПРАВОЙ колонки, а следующая
+    начинается с ЛЕВОЙ, и dehyphenate сращивает чужие друг другу слова.
+    Так пропал фельдшер Могучев на стр. 96 тома bv0000040: печать чистая,
+    распознано верно — «Добры-\nМогучевъ А. І.» превратилось в токен
+    'ДобрыМогучевъ', и фамилии в тексте не стало.
+
+    Поэтому первое слово после каждого переноса проверяется ещё раз,
+    целым. Проход узкий — только эти слова, — так что счёт кандидатов
+    от него почти не растёт.
+    """
+    out = []
+    for m in _AFTER_BREAK_RE.finditer(text):
+        hit = _test_token(m.group(1), stem, fragile, threshold)
+        if hit is None:
+            continue
+        cost, sc = hit
+        lo = max(0, m.start(1) - context_chars)
+        hi = min(len(text), m.end(1) + context_chars)
+        out.append(Match(
+            page=page, start=m.start(1), end=m.end(1), raw=m.group(1),
+            cost=cost, score=sc,
+            context=" ".join(text[lo:hi].split())))
+    return out
 
 
 def _find_hyphen_starts(text, stem, fragile, page, context_chars, min_fragment):

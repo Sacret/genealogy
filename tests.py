@@ -61,10 +61,11 @@ def main():
 
     bad = (hyphen_suite() + spelling_suite() + catalog_suite()
            + years_suite() + persons_suite() + doclinks_suite()
+           + pagelist_suite()
            + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS))
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -80,6 +81,14 @@ CASES_HYPHEN = [
     ("казакъ Карма-\n3инъ Петръ", "Кармазинъ", True),
     # Обычное слово со строчной: реальный ложный след в bv0000407 стр. 654
     ("для лицъ, не могу-\nщихъ представить", "Могучевъ", False),
+    # Две колонки: перенос кончает ПРАВУЮ, а следующая строка начинается
+    # с ЛЕВОЙ. Склейка сращивает чужие слова, и фамилия исчезает как
+    # токен. Реальный случай: bv0000040 стр. 96, фельдшер Могучев —
+    # печать чистая, распознано верно, а поиск его не видел.
+    ("Евд. Дмитр. Добры-\nМогучевъ А. І., Троицкій базаръ.", "Могучевъ", True),
+    ("сл. Мартынов-\nКармазинъ Ф. П., Азовскій баз.", "Кармазинъ", True),
+    # Настоящий перенос при этом остаётся переносом, а не двумя словами.
+    ("мѣщанинъ Кузне-\nцовъ Иванъ", "Кармазинъ", False),
 ]
 
 
@@ -323,6 +332,36 @@ def years_suite():
     if "<i class=more>" in single:
         bad += 1
         print("  [FAIL] одиночный год помечен цифрой")
+    return bad
+
+
+def pagelist_suite():
+    """Подтверждённая страница обязана стоять в списке страниц и жирным.
+
+    Поиск находит не всё: фельдшера Могучева на стр. 104 тома bv0000039
+    нашёл глаз, а не матчер, и в журнале эта страница не появилась вовсе —
+    список показывал одних отклонённых кандидатов, ни один номер не был
+    выделен, и находка читалась как её отсутствие.
+    """
+    bad = 0
+    print("\nсписок страниц:")
+    row = {"surname": "Могучевъ", "status": "found", "date": "2026-01-01",
+           "verdict": "", "confirmed": ["104"], "kin": ["104"],
+           "persons": {"104": "i0026"},
+           "hits": 3, "pages_with_hits": ["75", "99", "290"]}
+    doc = {"meta": {}, "rows": [row], "coverage": None, "year": 1909}
+    html = render({"bv0000039": doc})
+    cell = html.split("<td class=pages>")[1].split("</td>")[0]
+    checks = [
+        ("страница находки в списке", ">104</a>" in cell),
+        ("она выделена жирным", "class=hit href='" in cell
+                                and ">104</a>" in cell.split("class=hit")[1][:80]),
+        ("кандидаты не потерялись", ">75</a>" in cell and ">290</a>" in cell),
+        ("порядок числовой", cell.index(">99</a>") < cell.index(">104</a>")),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
     return bad
 
 

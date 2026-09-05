@@ -14,7 +14,8 @@ import pathlib
 import re
 from collections import OrderedDict
 
-from docstore import ROOT, documents, latest_verdicts, load_meta, read_log
+from docstore import (ROOT, documents, latest_verdicts, load_meta,
+                      persons as roster, read_log)
 
 STATUS = {
     "found":   ("найдена",      "ok"),
@@ -28,6 +29,12 @@ STATUS = {
 # по полю `kin` вердикта: зелёным — только названные там страницы.
 KIN_LABEL  = "найдена, родство подтверждено"
 MAYBE_LABEL = "найдена, родство не установлено"
+
+# Подтверждённое родство — это всегда чей-то предок поимённо, и журнал
+# называет его и уводит на страницу родословной (persons.json). Иначе
+# зелёная строка сообщает только «кто-то из семьи», а вопрос «кто именно
+# и что о нём уже известно» остаётся без ответа ровно там, где на него
+# есть ответ.
 
 CSS = """
 :root {
@@ -129,6 +136,11 @@ tr.hidden { display: none; }
 .badge.hit { background: var(--ok-bg); color: var(--ok-ink); }
 .badge.no { background: var(--no-bg); color: var(--no-ink); }
 .badge.wait { background: var(--wait-bg); color: var(--wait-ink); }
+.person { display: inline-block; margin-left: 7px; font-size: 12px;
+          font-weight: 600; color: var(--accent); text-decoration: none;
+          border-bottom: 1px dotted currentColor; }
+.person:hover { border-bottom-style: solid; }
+.sum-badge + .person { margin-right: 4px; }
 .note { color: var(--dim); font-size: 13px; margin-top: 5px; max-width: 62ch; }
 /* Вердикт длинный, и в нём три разных голоса: мой пересказ, цитата из
    приказа и то, что автор выделил капслоком. Курсив и жирный разводят их
@@ -213,6 +225,13 @@ box.addEventListener('input', () => {
       delete det.dataset.was;
     }
   });
+});
+
+// Ссылка на родословную стоит и в свёрнутой сводке, внутри <summary>:
+// без этого клик по имени заодно схлопывал бы таблицу, которую человек
+// как раз открыл, чтобы прочесть вердикт.
+document.querySelectorAll('summary .person').forEach(a => {
+  a.addEventListener('click', e => e.stopPropagation());
 });
 """
 
@@ -358,6 +377,35 @@ def row_badge(r):
         return label, cls
     _, kin = confirmed_pages(r)
     return (KIN_LABEL, "ok") if kin else (MAYBE_LABEL, "maybe")
+
+
+def kin_people(r):
+    """Кто найден: записи реестра для страниц с подтверждённым родством.
+
+    Порядок — по номеру страницы, повторы убраны: один человек, найденный
+    на трёх страницах тома, называется один раз. Неизвестный
+    идентификатор молча пропускается — реестр правится руками, и
+    опечатка в нём не должна ронять сборку журнала.
+    """
+    known = roster()
+    _, kin = confirmed_pages(r)
+    by_page = r.get("persons") or {}
+    out = OrderedDict()
+    for page in sorted(kin, key=int):
+        pid = by_page.get(page)
+        if pid in known:
+            out[pid] = known[pid]
+    return out
+
+
+def person_link(pid, who):
+    title = " · ".join(x for x in (who.get("годы"), who.get("кто")) if x)
+    return (f"<a class=person href='{e(who.get('url', ''))}' target=_blank "
+            f"title='{e(title)}'>{e(who.get('имя', pid))}</a>")
+
+
+def person_links(r):
+    return "".join(person_link(pid, who) for pid, who in kin_people(r).items())
 
 
 def crops_for(ident, surname, pages):
@@ -517,7 +565,8 @@ def collect():
                          "status": (v or {}).get("status", "unclear"),
                          "verdict": (v or {}).get("verdict", ""),
                          "confirmed": (v or {}).get("confirmed"),
-                         "kin": (v or {}).get("kin")})
+                         "kin": (v or {}).get("kin"),
+                         "persons": (v or {}).get("persons")})
         rows.sort(key=lambda r: r["date"])
         if rows or meta:
             docs[ident] = {"meta": meta, "rows": rows,
@@ -616,7 +665,8 @@ def render(docs) -> str:
         for r in sorted(rows, key=lambda r: (rank[r["status"]], r["surname"].lower())):
             label, cls = row_badge(r)
             chips.append(f"<span class='badge {cls} sum-badge'>"
-                         f"{e(r['surname'])} — {label}</span>")
+                         f"{e(r['surname'])} — {label}</span>"
+                         + person_links(r))
         word = plural(len(rows), "поиск", "поиска", "поисков")
         out.append("<details class=searches><summary>" + "".join(chips)
                    + f"<span class=sum-count>{len(rows)} {word}</span></summary>")
@@ -650,17 +700,21 @@ def render(docs) -> str:
             note = (f"<div class=note>{markup(r['verdict'])}</div>"
                     if r["verdict"] else "")
             shots = ""
+            people = roster()
             for page, f in crops_for(ident, r["surname"], confirmed):
                 who = ("родство подтверждено" if str(page) in kin
                        else "родство не установлено")
                 mark_cls = "hit" if str(page) in kin else "maybe"
+                pid = (r.get("persons") or {}).get(str(page))
+                named = (person_link(pid, people[pid]) if pid in people else "")
                 shots += (f"<div class=crop><img alt='{e(r['surname'])}, "
                           f"стр. {page}' src='{thumb_uri(f)}'>"
                           f"<div class=cap>стр. {page} — вырезка из скана, "
                           f"<a href='{e(f.relative_to(ROOT))}'>полный размер</a>"
                           f" · <span class='badge {mark_cls}'>{who}</span>"
-                          "</div></div>")
-            out.append(f"<td><span class='badge {cls}'>{label}</span>{note}{shots}</td>")
+                          f"{named}</div></div>")
+            out.append(f"<td><span class='badge {cls}'>{label}</span>"
+                       f"{person_links(r)}{note}{shots}</td>")
             out.append("</tr>")
         out.append("</tbody></table></details></section>")
 

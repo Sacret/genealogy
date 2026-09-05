@@ -3,9 +3,9 @@
 
 import sys
 from catalog import classify
-from journal import year_strip
+from journal import render, year_strip
 from prune import GITIGNORE, KEEP_LINE, finding_pages
-from find import bare_old_spelling
+from find import bare_old_spelling, kin_persons
 from surnamefind.search import find_in_text, stem_query
 
 # (текст, должно ли найтись)
@@ -60,9 +60,10 @@ def main():
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
     bad = (hyphen_suite() + spelling_suite() + catalog_suite()
-           + years_suite() + gitignore_suite())
+           + years_suite() + persons_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
-             + len(CASES_SPELLING) + len(CASES_CATALOG) + len(CASES_YEARS))
+             + len(CASES_SPELLING) + len(CASES_CATALOG) + len(CASES_YEARS)
+             + len(CASES_PERSONS))
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -191,10 +192,63 @@ def gitignore_suite():
     return len(need ^ listed)
 
 
+# Родство подтверждает человек, и в журнале оно должно быть названо
+# поимённо: --kin без --person не принимается, а лишний или незнакомый
+# идентификатор — ошибка, а не молчаливая потеря имени.
+CASES_PERSONS = [
+    ("один человек на все страницы",
+     ("i0023", ["80", "208"]), {"80": "i0023", "208": "i0023"}),
+    ("роспись по страницам",
+     ("197=i0010,217=i0026", ["197", "217"]),
+     {"197": "i0010", "217": "i0026"}),
+    ("родство без имени",       (None, ["254"]),            SystemExit),
+    ("имя без родства",         ("i0026", []),              SystemExit),
+    ("незнакомый идентификатор", ("i9999", ["7"]),          SystemExit),
+    ("названа лишняя страница",
+     ("7=i0026,8=i0026", ["7"]), SystemExit),
+    ("страница осталась без имени",
+     ("197=i0010", ["197", "217"]), SystemExit),
+]
+
+
+def persons_suite():
+    bad = 0
+    print("\nкто найден:")
+    for name, (spec, kin), expected in CASES_PERSONS:
+        try:
+            got = kin_persons(spec, kin)
+        except SystemExit:
+            got = SystemExit
+        ok = got == expected
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name:30} -> {got}")
+
+    # Ссылка на родословную стоит и в свёрнутой сводке, и в ячейке итога.
+    doc = _doc(1907, "found", kin=["254"])
+    doc["rows"][0]["persons"] = {"254": "i0117"}
+    html = render({"bv0000035": doc})
+    for want in ("family.sacret.ru/persons/i0117/", "Филипп Петрович Кармазин"):
+        if want not in html:
+            bad += 1
+            print(f"  [FAIL] в журнале нет {want!r}")
+    if html.count("class=person") < 2:
+        bad += 1
+        print("  [FAIL] имя названо только в одном месте")
+    # Находка без родства именем не подписывается: молчание — не подтверждение.
+    plain = render({"bv0000035": _doc(1907, "found")})
+    if "class=person" in plain:
+        bad += 1
+        print("  [FAIL] однофамилец подписан именем родственника")
+    if not bad:
+        print("  [ok ] ссылка на родословную в сводке и в итоге")
+    return bad
+
+
 def _doc(year, status, kin=()):
     """Дело для полосы лет: год, исход поиска и есть ли подтверждённое родство."""
     row = {"surname": "Могучевъ", "status": status, "date": "2026-01-01",
-           "verdict": "", "confirmed": list(kin) or ["7"], "kin": list(kin)}
+           "verdict": "", "confirmed": list(kin) or ["7"], "kin": list(kin),
+           "hits": len(kin), "pages_with_hits": list(kin)}
     return {"meta": {}, "rows": [row], "coverage": None, "year": year}
 
 

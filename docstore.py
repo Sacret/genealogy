@@ -101,7 +101,8 @@ def log_search(ident: str, surname: str, stem: str, threshold: float, hits) -> N
 
 
 def add_verdict(ident: str, surname: str, verdict: str,
-                status: str = "unclear", confirmed=None, kin=None) -> None:
+                status: str = "unclear", confirmed=None, kin=None,
+                persons=None) -> None:
     """Итог проверки глазами.
 
     Сырое число попаданий обманчиво: пять кандидатов на 'Кармазинъ'
@@ -118,6 +119,11 @@ def add_verdict(ident: str, surname: str, verdict: str,
     родство установлено, а не просто однофамилец. Разделять это важно:
     Могучевыхъ из ст. Кочетовской в приказах несколько семей, и журнал,
     красящий их все одинаково, обещает больше, чем известно.
+
+    `persons` — кто именно найден: {страница: идентификатор персоны из
+    persons.json}. Родство подтверждает человек, а не поиск, и «зелёная»
+    страница без имени говорит только «кто-то из семьи»; с именем она
+    ведёт на страницу родословной, где эта запись и пригодится.
     """
     rec = {
         "type": "verdict",
@@ -130,8 +136,23 @@ def add_verdict(ident: str, surname: str, verdict: str,
         rec["confirmed"] = [str(p) for p in confirmed]
     if kin is not None:
         rec["kin"] = [str(p) for p in kin]
+    if persons:
+        rec["persons"] = {str(page): pid for page, pid in persons.items()}
     with (doc_dir(ident) / "searches.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def persons() -> dict:
+    """Реестр родственников из persons.json: идентификатор → имя, годы, URL.
+
+    Файл ведётся руками, и это единственное место, где родство названо
+    поимённо: сам поиск отличить Могучева от Могучева не может. Пустой
+    словарь, если файла нет, — журнал тогда просто не подписывает находки.
+    """
+    p = ROOT / "persons.json"
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8")).get("люди", {})
 
 
 def documents() -> list:

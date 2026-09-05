@@ -14,7 +14,8 @@ import sys
 import catalog
 import journal
 import prune
-from docstore import add_verdict, doc_dir, load_meta, log_search, print_log
+from docstore import (add_verdict, doc_dir, load_meta, log_search,
+                      persons as doc_persons, print_log)
 from surnamefind.search import find_in_pages, stem_query
 from surnamefind.match import default_threshold
 
@@ -100,6 +101,49 @@ def old_form(word: str) -> bool:
     return len(low) > 4 and low.endswith(("аго", "яго")) and low not in NOT_OLD
 
 
+def kin_persons(spec, kin):
+    """Разбор --person: кто найден на каждой странице с подтверждённым родством.
+
+    Принимается либо один идентификатор на все страницы ('i0026'), либо
+    роспись по страницам ('197=i0010,217=i0026') — в одном томе находятся
+    и разные родственники сразу (bv0000404: Василий на стр. 197 и 357,
+    Алексей на 217).
+
+    Родство без имени журнал показать не может: зелёная строка обещает
+    предка, а на кого именно она указывает, знает только тот, кто это
+    родство установил. Поэтому --kin без --person не принимается — как
+    и --status found без --pages.
+    """
+    roster = doc_persons()
+    if spec and not kin:
+        sys.exit("--person без --kin: имя ставится к странице, где родство "
+                 "подтверждено")
+    if not kin:
+        return None
+    if not spec:
+        sys.exit("--kin без --person: назовите, кто найден, идентификатором "
+                 "из persons.json (например --person i0026), иначе в журнале "
+                 "родство некому приписать")
+    out = {}
+    for part in (s.strip() for s in spec.split(",") if s.strip()):
+        if "=" in part:
+            page, pid = (x.strip() for x in part.split("=", 1))
+            out[page] = pid
+        else:
+            out.update({p: part for p in kin})
+    unknown = sorted({pid for pid in out.values() if pid not in roster})
+    if unknown:
+        sys.exit("нет такой персоны в persons.json: " + ", ".join(unknown)
+                 + "\nизвестны: " + ", ".join(sorted(roster)))
+    stray = sorted(set(out) - set(kin))
+    if stray:
+        sys.exit("--person называет страницы вне --kin: " + ", ".join(stray))
+    missing = sorted(set(kin) - set(out), key=int)
+    if missing:
+        sys.exit("не сказано, кто найден на стр. " + ", ".join(missing))
+    return out
+
+
 def page_no(name: str) -> str:
     return name.replace(".txt", "").lstrip("p").lstrip("0") or "0"
 
@@ -127,6 +171,10 @@ def main():
                                   "установленным родством, а не однофамилец. "
                                   "Их журнал красит зелёным, остальные находки "
                                   "— синим «родство не установлено»")
+    ap.add_argument("--person", help="кто именно найден: идентификатор из "
+                                     "persons.json ('i0026') — на все страницы "
+                                     "--kin сразу, или поимённо по страницам "
+                                     "через запятую: '197=i0010,217=i0026'")
     a = ap.parse_args()
 
     if a.verdict and a.surname:
@@ -153,7 +201,9 @@ def main():
         if kin and not set(kin) <= set(pages or []):
             sys.exit("--kin называет страницы, которых нет в --pages: "
                      + ", ".join(sorted(set(kin) - set(pages or []))))
-        add_verdict(a.ident, a.surname, a.verdict, a.status, pages, kin)
+        persons = kin_persons(a.person, kin)
+        add_verdict(a.ident, a.surname, a.verdict, a.status, pages, kin,
+                    persons)
         print(f"журнал: {journal.rebuild()}")
         # Вердикт — это и есть момент, когда том уходит из очереди в
         # просмотренные. Список, который правят руками, назавтра врёт.

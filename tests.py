@@ -403,7 +403,7 @@ def pagelist_suite():
            "hits": 3, "pages_with_hits": ["75", "99", "290"]}
     doc = {"meta": {}, "rows": [row], "coverage": None, "year": 1909}
     html = render({"bv0000039": doc})
-    cell = html.split("<td class=pages>")[1].split("</td>")[0]
+    cell = html.split("<td class=pages ")[1].split("</td>")[0]
     checks = [
         ("страница находки в списке", ">104</a>" in cell),
         ("она выделена жирным", "class=hit href='" in cell

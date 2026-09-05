@@ -131,7 +131,10 @@ th { text-align: left; font-size: 11.5px; text-transform: uppercase;
 td { padding: 11px 14px; border-top: 1px solid var(--line); vertical-align: top; }
 tr.hidden { display: none; }
 .surname { font-weight: 600; white-space: nowrap; }
-.when, .num { color: var(--dim); font-size: 13px; white-space: nowrap; }
+/* Только клетки: у `th` свой кегль, и правило для `.num` без `td`
+   перебивало его по специфичности — «Кандидатов» в шапке набирался на
+   полтора пункта крупнее остальных заголовков и не капителью. */
+td.when, td.num { color: var(--dim); font-size: 13px; white-space: nowrap; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .badge { display: inline-block; padding: 2px 9px; border-radius: 20px;
@@ -226,6 +229,29 @@ a.year:hover { border-color: var(--accent); }
 
 /* Вырезка из скана: слово, ради которого всё и делалось. Белая подложка —
    сканы серые, на тёмной теме иначе получается дыра. */
+/* Пять столбцов на телефон не помещаются: минимальная ширина таблицы
+   около 600 px, и вместе с ней вбок уезжает вся страница — вырезка из
+   скана оказывается за краем экрана, хотя раскрывают строку именно
+   ради неё. Ниже 700 px строка перестаёт быть строкой и раскладывается
+   карточкой: фамилия, итог с вердиктом, страницы, а служебные числа —
+   подписью внизу. Шапка там не нужна, её работу берут подписи из
+   `data-l`: столбец, потерявший заголовок, иначе оставляет голое число. */
+@media (max-width: 700px) {
+  table, tbody { display: block; }
+  thead { display: none; }
+  tr { display: flex; flex-wrap: wrap; align-items: baseline;
+       column-gap: 12px; row-gap: 7px; padding: 12px 14px;
+       border-top: 1px solid var(--line); }
+  td { display: block; flex: 1 0 100%; border-top: none; padding: 0; }
+  td.surname { order: 1; font-size: 16px; }
+  td.result { order: 2; }
+  td.pages { order: 3; }
+  td.num { order: 4; flex: 0 0 auto; text-align: left; }
+  td.when { order: 5; flex: 0 0 auto; }
+  td.num::before, td.pages::before { content: attr(data-l) ': ';
+                                     color: var(--dim); }
+}
+
 .crop { margin-top: 8px; }
 .crop img { display: block; max-width: 100%; border: 1px solid var(--line);
             border-radius: 8px; background: #fff; padding: 4px; }
@@ -778,8 +804,9 @@ def render(docs) -> str:
             out.append(f"<tr data-k='{e(key)}'>")
             out.append(f"<td class=when>{e(r['date'][:16].replace('T', ' '))}</td>")
             out.append(f"<td class=surname>{e(r['surname'])}</td>")
-            out.append(f"<td class=num>{r['hits']}</td>")
-            out.append(f"<td class=pages>{', '.join(links) or '—'}</td>")
+            out.append(f"<td class=num data-l='Кандидатов'>{r['hits']}</td>")
+            out.append(f"<td class=pages data-l='Страницы'>"
+                       f"{', '.join(links) or '—'}</td>")
             note = (f"<div class=note>"
                     f"{markup(r['verdict'], docs.keys(), ident)}</div>"
                     if r["verdict"] else "")
@@ -797,7 +824,8 @@ def render(docs) -> str:
                           f"<a href='{e(f.relative_to(ROOT))}'>полный размер</a>"
                           f" · <span class='badge {mark_cls}'>{who}</span>"
                           f"{named}</div></div>")
-            out.append(f"<td><span class='badge {cls}'>{label}</span>{note}{shots}</td>")
+            out.append(f"<td class=result><span class='badge {cls}'>{label}"
+                       f"</span>{note}{shots}</td>")
             out.append("</tr>")
         out.append("</tbody></table></details></section>")
 

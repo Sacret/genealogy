@@ -35,6 +35,11 @@ MAYBE_LABEL = "найдена, родство не установлено"
 # зелёная строка сообщает только «кто-то из семьи», а вопрос «кто именно
 # и что о нём уже известно» остаётся без ответа ровно там, где на него
 # есть ответ.
+#
+# Имя стоит в свёрнутой сводке и под вырезкой — то есть там, где итог
+# читается сразу, и там, где находка видна глазом. В развёрнутой строке
+# его нет: рядом с вердиктом человек и так назван, а третья ссылка на то
+# же самое только загромождала бы разбор.
 
 CSS = """
 :root {
@@ -713,8 +718,7 @@ def render(docs) -> str:
                           f"<a href='{e(f.relative_to(ROOT))}'>полный размер</a>"
                           f" · <span class='badge {mark_cls}'>{who}</span>"
                           f"{named}</div></div>")
-            out.append(f"<td><span class='badge {cls}'>{label}</span>"
-                       f"{person_links(r)}{note}{shots}</td>")
+            out.append(f"<td><span class='badge {cls}'>{label}</span>{note}{shots}</td>")
             out.append("</tr>")
         out.append("</tbody></table></details></section>")
 

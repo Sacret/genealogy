@@ -223,7 +223,9 @@ def persons_suite():
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {name:30} -> {got}")
 
-    # Ссылка на родословную стоит и в свёрнутой сводке, и в ячейке итога.
+    # Ссылка на родословную стоит в свёрнутой сводке — там, где итог
+    # читается сразу, — и не повторяется в развёрнутой строке: рядом с
+    # вердиктом человек и так назван.
     doc = _doc(1907, "found", kin=["254"])
     doc["rows"][0]["persons"] = {"254": "i0117"}
     html = render({"bv0000035": doc})
@@ -231,16 +233,20 @@ def persons_suite():
         if want not in html:
             bad += 1
             print(f"  [FAIL] в журнале нет {want!r}")
-    if html.count("class=person") < 2:
+    summary, _, rest = html.partition("</summary>")
+    if "class=person" not in summary:
         bad += 1
-        print("  [FAIL] имя названо только в одном месте")
+        print("  [FAIL] в свёрнутой сводке имени нет")
+    if "class=person" in rest:
+        bad += 1
+        print("  [FAIL] имя повторено в развёрнутой строке")
     # Находка без родства именем не подписывается: молчание — не подтверждение.
     plain = render({"bv0000035": _doc(1907, "found")})
     if "class=person" in plain:
         bad += 1
         print("  [FAIL] однофамилец подписан именем родственника")
     if not bad:
-        print("  [ok ] ссылка на родословную в сводке и в итоге")
+        print("  [ok ] ссылка на родословную — в сводке, и только там")
     return bad
 
 

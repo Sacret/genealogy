@@ -21,7 +21,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-from docstore import doc_dir, load_meta
+from docstore import allow_big_scans, doc_dir, load_meta
 
 PERCENTILE = 5.0          # подобрано по отдаче фамилий на стр. 392 bv0000390
 BINARY_SHARE = 0.20       # выше этой доли чистых 0/255 скан уже бинарный
@@ -58,6 +58,7 @@ def job(args):
 
 
 def main():
+    allow_big_scans()
     ap = argparse.ArgumentParser()
     ap.add_argument("ident")
     ap.add_argument("--percentile", type=float, default=PERCENTILE)

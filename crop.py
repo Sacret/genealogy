@@ -18,7 +18,7 @@
 
 import argparse, csv, io, pathlib, subprocess, sys, tempfile
 
-from docstore import doc_dir
+from docstore import allow_big_scans, doc_dir
 from fetch import ensure_page
 from rescue import BAND, STEP
 from surnamefind.normalize import normalize
@@ -87,6 +87,7 @@ def matches(stem, text, thr, fragile) -> bool:
 
 
 def main():
+    allow_big_scans()
     ap = argparse.ArgumentParser()
     ap.add_argument("ident")
     ap.add_argument("page", type=int)

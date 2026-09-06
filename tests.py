@@ -4,6 +4,7 @@
 import sys
 from catalog import SKIP_BY_ID, build, classify, years_covered
 from journal import markup, render, year_strip
+from docstore import BIG_SCAN_PIXELS, allow_big_scans
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, kin_persons
 from surnamefind.search import find_in_text, stem_query
@@ -62,11 +63,11 @@ def main():
 
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
            + years_suite() + persons_suite() + doclinks_suite()
-           + pagelist_suite()
+           + pagelist_suite() + bigscan_suite()
            + pamyatnye_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 3 + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 2 + 8)
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -474,6 +475,32 @@ def years_suite():
         ("надпись «без года» названа раз",
          html.count(">без года</div>") == 1),
     ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+    return bad
+
+
+def bigscan_suite():
+    """Складень в 196 Мпикс должен открываться.
+
+    Pillow по умолчанию отказывается открывать картинку больше 178
+    Мпикс, и на стр. 530 «Донских дел» (bv0000008) падала бинаризация:
+    скан складня при 400 dpi — 11478×17056. Проверяется не сам файл
+    (сканы в репозитории не лежат), а то, что потолок поднят и что
+    поднят он выше этой страницы, но не в бесконечность.
+    """
+    from PIL import Image
+    before = Image.MAX_IMAGE_PIXELS
+    allow_big_scans()
+    checks = [
+        ("потолок поднят", Image.MAX_IMAGE_PIXELS == BIG_SCAN_PIXELS),
+        ("складень проходит", Image.MAX_IMAGE_PIXELS > 11478 * 17056),
+        ("но не снят совсем", Image.MAX_IMAGE_PIXELS is not None),
+    ]
+    Image.MAX_IMAGE_PIXELS = before
+    print("\nбольшие сканы:")
+    bad = 0
     for name, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {name}")

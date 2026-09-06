@@ -21,7 +21,7 @@ import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
-from docstore import doc_dir, load_meta
+from docstore import allow_big_scans, doc_dir, load_meta
 
 BAND, STEP = 190, 95        # высота полосы и шаг: внахлёст, чтобы строка
                             # не разрезалась пополам ни при каком смещении
@@ -47,6 +47,7 @@ def bands(args):
 
 
 def main():
+    allow_big_scans()
     ap = argparse.ArgumentParser()
     ap.add_argument("ident")
     ap.add_argument("--jobs", type=int, default=6)

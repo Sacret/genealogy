@@ -2,7 +2,7 @@
 падежи и типичные подмены букв в OCR."""
 
 import sys
-from catalog import NO_NAMES, build, classify, years_covered
+from catalog import SKIP_BY_ID, build, classify, years_covered
 from journal import markup, render, year_strip
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, kin_persons
@@ -221,7 +221,7 @@ def catalog_suite():
     got = [r for r in out["не_будут_просмотрены"] if r["id"] == ident]
     checks = [
         ("отложен по номеру", bool(got)),
-        ("причина названа", bool(got) and got[0].get("причина") == NO_NAMES[ident]),
+        ("причина названа", bool(got) and got[0].get("причина") == SKIP_BY_ID[ident]),
         ("в очереди его нет",
          all(r["id"] != ident for q in out["очередь"].values() for r in q)),
     ]

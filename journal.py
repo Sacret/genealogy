@@ -579,8 +579,11 @@ def year_strip(docs) -> str:
                "wait" if (not st or "unclear" in st) else "no")
         y = d.get("year")
         if y is None:
-            # Альманах или справочник, о годе молчащий. Цвет считается так
-            # же, как у года с двумя делами: по лучшему исходу.
+            # Год не проставлен: либо книга о нём молчит (альманах,
+            # справочник), либо он есть, но полосу рвёт — «Донские дела»
+            # издают документы 1648-1654 годов, и один такой том растянул
+            # бы ряд на два с половиной века пустых клеток. Цвет считается
+            # так же, как у года с двумя делами: по лучшему исходу.
             noyear += 1
             if RANK.get(cls, 9) < RANK.get(noyear_cls, 9):
                 noyear_cls = cls
@@ -608,7 +611,7 @@ def year_strip(docs) -> str:
         cells.append(
             f"<a class='year noyear {noyear_cls}' href='#{NOYEAR_ANCHOR}' "
             f"title='{noyear} {plural(noyear, 'дело', 'дела', 'дел')} "
-            "без года: альманахи и справочники, о годе молчащие'>без года"
+            "без года: том, который в полосу лет не встаёт'>без года"
             + (f"<i class=more>{noyear}</i>" if noyear > 1 else "") + "</a>")
     seen, gaps = sum(counts.values()), (hi - lo + 1) - len(years)
     note = (f"{lo}—{hi}: просмотрено {seen} "

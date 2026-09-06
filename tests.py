@@ -66,7 +66,7 @@ def main():
            + pamyatnye_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 3 + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 2 + 8)
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 2 + 8)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -415,6 +415,15 @@ CASES_YEARS = [
     ("одно дело за год — без цифры",
      {"a": _doc(1897, "absent")},
      ["#g1897", "class='year no'"]),
+    # Альманах о годе молчит, и полоса до него не доводит: ряд кончается
+    # последним известным годом. Пузырь в хвосте — его единственная ссылка.
+    ("дело без года — пузырь в хвосте",
+     {"a": _doc(1897, "absent"), "b": _doc(None, "absent")},
+     ["#no-year", "class='year noyear no'", ">без года"]),
+    ("два дела без года — с цифрой",
+     {"a": _doc(1897, "absent"), "b": _doc(None, "absent"),
+      "c": _doc(None, "found")},
+     ["class='year noyear maybe'", "<i class=more>2</i>"]),
 ]
 
 
@@ -448,6 +457,22 @@ def years_suite():
          in html),
         ("якорь остаётся снаружи",
          html.index("id='g1874'") < html.index("<section class=doc id='b'>")),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+
+    # Дела без года идут последними и подряд: якорь ставится один, на
+    # первом из них, иначе ссылка из полосы вела бы в середину пачки.
+    html = render({"a": _doc(1873, "absent"), "b": _doc(None, "absent"),
+                   "c": _doc(None, "absent")})
+    checks = [
+        ("якорь без года один", html.count("id='no-year'") == 1),
+        ("якорь перед первым делом без года",
+         html.index("id='no-year'") < html.index("<section class=doc id='b'>")
+         < html.index("<section class=doc id='c'>")),
+        ("надпись «без года» названа раз",
+         html.count(">без года</div>") == 1),
     ]
     for name, ok in checks:
         bad += not ok

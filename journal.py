@@ -191,6 +191,10 @@ a.year:hover { border-color: var(--accent); }
 .year.wait { background: var(--wait-bg); color: var(--wait-ink);
              border-color: transparent; }
 .year.gap { background: transparent; border-style: dashed; opacity: .55; }
+/* Пузырь дел без года: тот же ряд, но слово вместо числа, поэтому
+   без табличных цифр и с полями пошире — иначе буквы жмутся к краю. */
+.year.noyear { min-width: auto; padding: 5px 10px;
+               font-variant-numeric: normal; }
 /* Цифра поднимается своим align-self, а не vertical-align: у флексового
    элемента vertical-align не работает вовсе, а в строке он растил бы
    строчный бокс — с этого и съезжал текст. */
@@ -547,6 +551,13 @@ def year_anchor(y: int) -> str:
     return f"g{y}"
 
 
+# Дела без года стоят в конце списка, и до них полоса не доводит: ряд
+# кончается последним известным годом. Пузырь в хвосте полосы — их
+# единственная ссылка, а якорь у него отдельный: года у такого дела нет,
+# и `g...` для него не построить.
+NOYEAR_ANCHOR = "no-year"
+
+
 def year_strip(docs) -> str:
     """Сплошной ряд лет от первого до последнего: где документ, где пробел.
 
@@ -559,16 +570,22 @@ def year_strip(docs) -> str:
     год зелёный.
     """
     years, counts = {}, {}
+    noyear, noyear_cls = 0, None
     for ident, d in docs.items():
-        y = d.get("year")
-        if y is None:
-            continue
-        counts[y] = counts.get(y, 0) + 1
         st = {r["status"] for r in d["rows"]}
         kin = any(confirmed_pages(r)[1] for r in d["rows"])
         cls = ("ok" if kin else
                "maybe" if "found" in st else
                "wait" if (not st or "unclear" in st) else "no")
+        y = d.get("year")
+        if y is None:
+            # Альманах или справочник, о годе молчащий. Цвет считается так
+            # же, как у года с двумя делами: по лучшему исходу.
+            noyear += 1
+            if RANK.get(cls, 9) < RANK.get(noyear_cls, 9):
+                noyear_cls = cls
+            continue
+        counts[y] = counts.get(y, 0) + 1
         # Два дела за один год — берём лучший исход: год всё равно проверен.
         if RANK.get(cls, 9) < RANK.get(years.get(y, "gap"), 9):
             years[y] = cls
@@ -587,6 +604,12 @@ def year_strip(docs) -> str:
                          + "</a>")
         else:
             cells.append(f"<span class='year gap' title='не смотрели'>{y}</span>")
+    if noyear:
+        cells.append(
+            f"<a class='year noyear {noyear_cls}' href='#{NOYEAR_ANCHOR}' "
+            f"title='{noyear} {plural(noyear, 'дело', 'дела', 'дел')} "
+            "без года: альманахи и справочники, о годе молчащие'>без года"
+            + (f"<i class=more>{noyear}</i>" if noyear > 1 else "") + "</a>")
     seen, gaps = sum(counts.values()), (hi - lo + 1) - len(years)
     note = (f"{lo}—{hi}: просмотрено {seen} "
             f"{plural(seen, 'дело', 'дела', 'дел')} за {len(years)} "
@@ -597,6 +620,11 @@ def year_strip(docs) -> str:
             f"{plural(seen, 'дело', 'дела', 'дел')}.")
     multi = (" Цифра в клетке — сколько дел за этот год; цвет по лучшему "
              "из них." if any(n > 1 for n in counts.values()) else "")
+    # Дела без года в счёт полосы не входят: она про годы, а у них его нет.
+    # Но и потеряться они не должны, поэтому названы отдельно.
+    if noyear:
+        multi += (f" Ещё {noyear} {plural(noyear, 'дело', 'дела', 'дел')} "
+                  "без года — они в конце списка.")
     return ("<div class=years>" + "".join(cells) + "</div>"
             f"<p class=years-note>{note}{multi} Зелёный — найден человек, чьё "
             "родство установлено; синий — фамилия найдена, но это "
@@ -697,6 +725,7 @@ def render(docs) -> str:
     # Якорь стоит снаружи секции нарочно: фильтр по фамилии прячет саму
     # секцию, а ссылка из полосы лет должна вести куда-то и тогда.
     seen_year = object()
+    starts_noyear = True          # первое дело без года получит свой якорь
     for ident, d in docs.items():
         meta, rows = d["meta"], d["rows"]
         title = meta.get("title") or ident
@@ -705,11 +734,19 @@ def render(docs) -> str:
         if starts_year:
             seen_year = d["year"]
             out.append(f"<div class=year-mark id='{year_anchor(seen_year)}'></div>")
+        # Дела без года идут последними и все подряд, так что якорь нужен
+        # один — на первом из них, куда и ведёт пузырь «без года».
+        head_noyear = d.get("year") is None and starts_noyear
+        if head_noyear:
+            starts_noyear = False
+            out.append(f"<div class=year-mark id='{NOYEAR_ANCHOR}'></div>")
         out.append(f"<section class=doc id='{e(ident)}'>")
         # Год уже назван в строке под заголовком, так что метка — чистая
         # навигация глазом, и читалке её повторять незачем.
         if starts_year:
             out.append(f"<div class=year-tag aria-hidden=true>{seen_year}</div>")
+        elif head_noyear:
+            out.append("<div class=year-tag aria-hidden=true>без года</div>")
         out.append(f"<h2>{e(title)}</h2>")
         bits = [f"<code>{e(ident)}</code>"]
         if d.get("year"):

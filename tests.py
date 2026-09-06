@@ -2,7 +2,7 @@
 падежи и типичные подмены букв в OCR."""
 
 import sys
-from catalog import classify, years_covered
+from catalog import NO_NAMES, build, classify, years_covered
 from journal import markup, render, year_strip
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, kin_persons
@@ -65,7 +65,7 @@ def main():
            + pagelist_suite()
            + pamyatnye_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
-             + len(CASES_SPELLING) + len(CASES_CATALOG) + len(CASES_YEARS)
+             + len(CASES_SPELLING) + len(CASES_CATALOG) + 3 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 2 + 8)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
@@ -210,6 +210,24 @@ def catalog_suite():
             bad += 1
         mark = "ok " if got == expected else "FAIL"
         print(f"  [{mark}] {title[:52]!r:56} -> {got}")
+
+    # Пролистанное руками сильнее заголовка: «Область войска Донского по
+    # переписи» — это вторая очередь, но имён в книге не нашлось, и
+    # причина должна доехать до `documents.json`.
+    ident = "bv0000260"
+    rec = {"id": ident,
+           "title": "Область войска Донского по переписи 1873 года: Вып. 1, кн. 2"}
+    out = build({ident: rec})
+    got = [r for r in out["не_будут_просмотрены"] if r["id"] == ident]
+    checks = [
+        ("отложен по номеру", bool(got)),
+        ("причина названа", bool(got) and got[0].get("причина") == NO_NAMES[ident]),
+        ("в очереди его нет",
+         all(r["id"] != ident for q in out["очередь"].values() for r in q)),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
     return bad
 
 

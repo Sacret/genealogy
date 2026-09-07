@@ -44,6 +44,12 @@ DEFAULT_CEILING = 500
 
 ORDERS = re.compile(r"Приказы по войску Донскому", re.I)
 
+# Газете — своя очередь, а не «донской край прочее». Причин две. Выпуск
+# это четыре полосы, а не семисотстраничный том, и триста выпусков,
+# подмешанные к книгам, вытеснили бы их из списка одним своим числом.
+# И работа с подшивкой другая: она берётся подряд, а не по тому за раз.
+NEWSPAPER = re.compile(r"Донские областные ведомости", re.I)
+
 SKIP = re.compile("|".join([
     r"экслибрис",
     r"Жизнь и подвиги графа Матвея Ивановича Платова",
@@ -248,17 +254,42 @@ POOR_SCAN = {
 
 QUEUES = ("1_приказы_по_войску_донскому",
           "2_казачество_войско_донское_новочеркасск",
-          "3_донской_край_прочее")
+          "3_донской_край_прочее",
+          "4_газеты")
 
 
 # --- кэш заголовков ---------------------------------------------------
 
-def ident_of(n: int) -> str:
-    return "bv%07d" % n
+def ident_of(n: int, prefix: str = "bv") -> str:
+    return "%s%07d" % (prefix, n)
 
 
 def number_of(ident: str) -> int:
     return int(ident[2:])
+
+
+def prefix_of(ident: str) -> str:
+    return ident[:2]
+
+
+MONTHS = {m: i for i, m in enumerate(
+    "января февраля марта апреля мая июня июля августа сентября "
+    "октября ноября декабря".split(), 1)}
+
+
+def issue_order(title: str) -> tuple:
+    """Место выпуска внутри года: (месяц, день, номер).
+
+    Номера одного мало: в 1911 году под «№ 1» лежат два разных выпуска —
+    4 января (pn0024070) и 1 января (pn0024276). Газета шла двумя
+    рядами, заголовок их не различает, и порядок по номеру склеил бы
+    ряды в чередование. Дата различает, а номер остаётся третьим
+    ключом — на случай двух выпусков одного дня.
+    """
+    d = re.search(r"\((\d+)\s+([а-я]+)", title)
+    n = re.search(r"№\s*(\d+)", title)
+    month, day = (MONTHS.get(d.group(2), 0), int(d.group(1))) if d else (0, 0)
+    return month, day, int(n.group(1)) if n else 0
 
 
 def load_catalog() -> dict:
@@ -377,12 +408,16 @@ def classify(title: str) -> str:
     Обратная сторона такого порядка — в `SKIP` нельзя класть широкие
     начала названий: «Свод законов Российской Империи» разложен по
     томам, и том об управлении казаков нужен, а том об уставе железных
-    дорог нет.
+    дорог нет. Газета стоит там же, где приказы, — раньше `REGION`:
+    «Донские областные ведомости» подходят под `Дон` и без своего
+    правила разошлись бы по третьей очереди книг.
     """
     if checked_elsewhere(title):
         return "не_будут_просмотрены"
     if ORDERS.search(title):
         return "1_приказы_по_войску_донскому"
+    if NEWSPAPER.search(title):
+        return "4_газеты"
     if SKIP.search(title):
         return "не_будут_просмотрены"
     if COSSACK.search(title):
@@ -401,7 +436,7 @@ def build(catalog: dict) -> dict:
     """
     out = {
         "источник": f"{LIBRARY}/ (ДГПБ, Vivaldi)",
-        "диапазон": "",
+        "диапазон": {},
         "собрано": datetime.now().date().isoformat(),
         "просмотрены": [],
         "в_работе": [],
@@ -464,16 +499,28 @@ def build(catalog: dict) -> dict:
     q2.sort(key=lambda r: (r["подгруппа"] != "адрес-календари и справочники",
                            r["id"]))
 
+    # Газета — по времени, а не по номеру в библиотеке: подшивка
+    # выложена вперемешку (pn0024000 — это сентябрь 1912-го, pn0024300 —
+    # февраль 1911-го), и очередь по id читалась бы вразнобой.
+    out["очередь"]["4_газеты"].sort(
+        key=lambda r: (r.get("год") or 0, issue_order(r["title"]), r["id"]))
+
     # Плохие сканы — в конец своей очереди. Сортировка устойчива, так что
     # порядок остальных, включая подгруппы второй очереди, не меняется.
     for items in out["очередь"].values():
         items.sort(key=lambda r: r["id"] in POOR_SCAN)
 
-    # Диапазон — про сплошной опрос bv-номеров; тома с другим префиксом
-    # приходят по прямой ссылке и границ опроса не двигают.
-    numbers = sorted(number_of(i) for i in catalog if i.startswith("bv"))
-    if numbers:
-        out["диапазон"] = f"{ident_of(numbers[0])} — {ident_of(numbers[-1])}"
+    # Границы — по каждому префиксу свои: нумерации у них разные, и
+    # bv0000011 не становится опрошенным оттого, что есть ot0000011.
+    # Отсюда и разряд на префикс, а не одна строка на весь каталог:
+    # книги опрошены с нуля, газета — отрезком в середине подшивки.
+    bounds = {}
+    for ident in catalog:
+        p, n = prefix_of(ident), number_of(ident)
+        lo, hi = bounds.get(p, (n, n))
+        bounds[p] = (min(lo, n), max(hi, n))
+    out["диапазон"] = {p: f"{ident_of(lo, p)} — {ident_of(hi, p)}"
+                       for p, (lo, hi) in sorted(bounds.items())}
     # Номера могли опрашиваться отрезками, так что границы ещё не значат,
     # что между ними спрошено всё: сколько именно — говорит это число.
     out["опрошено"] = len(catalog)
@@ -572,8 +619,11 @@ def main():
         description="Каталог документов библиотеки и очередь на просмотр")
     ap.add_argument("--range", metavar="A-B",
                     help="какие номера опросить, например 500-800")
+    ap.add_argument("--prefix", default="bv", metavar="XX",
+                    help="что опрашивать: bv — книги, pn — газеты "
+                         "(с любым, кроме bv, нужен --range)")
     ap.add_argument("--to", type=int, metavar="N",
-                    help="раздвинуть каталог до bv00000NN включительно")
+                    help="раздвинуть каталог до номера N включительно")
     ap.add_argument("--recheck", action="store_true",
                     help="перезапросить номера, записанные как отсутствующие")
     ap.add_argument("--rebuild", action="store_true",
@@ -584,27 +634,37 @@ def main():
     a = ap.parse_args()
 
     catalog = load_catalog()
-    # Только bv: у документов с другим префиксом своя нумерация, и
-    # bv0000011 не становится опрошенным оттого, что есть ot0000011.
-    known = {number_of(i) for i in catalog if i.startswith("bv")}
+    # Опрошенное считается внутри одного префикса: нумерации у них
+    # разные, и bv0000011 не становится опрошенным оттого, что есть
+    # ot0000011.
+    known = {number_of(i) for i in catalog if prefix_of(i) == a.prefix}
 
     if not a.rebuild:
         if a.range:
             lo, hi = parse_range(a.range)
-        else:
+        elif a.prefix == "bv":
             lo, hi = 0, max([DEFAULT_CEILING, *known])
+        else:
+            # Потолок с нуля есть только у книг: там опрос идёт подряд с
+            # начала библиотеки. Газетные номера — это середина чужой
+            # нумерации (подшивка «Ведомостей» начинается за pn0020000),
+            # и опрос от нуля был бы часами впустую.
+            ap.error(f"--prefix {a.prefix}: нужен --range, "
+                     f"сплошной опрос с нуля тут не о чем")
         if a.to is not None:
             hi = max(hi, a.to)
 
-        todo = [ident_of(n) for n in range(lo, hi + 1)
+        todo = [ident_of(n, a.prefix) for n in range(lo, hi + 1)
                 if n not in known
-                or (a.recheck and not catalog[ident_of(n)].get("title"))]
+                or (a.recheck
+                    and not catalog[ident_of(n, a.prefix)].get("title"))]
         if todo:
-            print(f"опрашиваю {len(todo)} номеров "
-                  f"({ident_of(lo)} — {ident_of(hi)})", flush=True)
+            print(f"опрашиваю {len(todo)} номеров ({ident_of(lo, a.prefix)} — "
+                  f"{ident_of(hi, a.prefix)})", flush=True)
             catalog.update(scan(todo, a.workers, a.timeout, a.retries))
         else:
-            print(f"новых номеров в {ident_of(lo)} — {ident_of(hi)} нет")
+            print(f"новых номеров в {ident_of(lo, a.prefix)} — "
+                  f"{ident_of(hi, a.prefix)} нет")
 
     out = build(catalog)
     write(out)
@@ -617,7 +677,8 @@ def main():
              ("нет документа", len(out["нет_документа"]))]
     width = max(len(name) for name, _ in rows)
 
-    print(f"\n{DOCUMENTS.name}: {out['диапазон']}")
+    print(f"\n{DOCUMENTS.name}: "
+          + ", ".join(out["диапазон"].values()))
     for name, count in rows:
         print(f"  {name:<{width}}  {count:4d}")
     if out["в_работе"]:

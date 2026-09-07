@@ -90,6 +90,22 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 }
 #filter:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
+/* Фильтр по итогу. Чипы повторяют цвета итоговых пузырей — серый,
+   синий, зелёный, — чтобы связь «нажал этот цвет — остались такие
+   строки» читалась без подписи. Невыбранный чип приглушён, но не
+   обесцвечен: цвет и есть его смысл. */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -16px 0 26px; }
+.badge.chip {
+  font-family: inherit; font-size: 12.5px; line-height: 1.4; cursor: pointer;
+  padding: 5px 13px; border: 1px solid transparent; opacity: .62;
+}
+.badge.chip:hover { opacity: .85; }
+.badge.chip[aria-pressed=true] { opacity: 1; border-color: currentColor; }
+.badge.chip:focus-visible { outline: 2px solid var(--accent);
+                            outline-offset: 2px; }
+.badge.chip .n { opacity: .7; margin-left: 6px;
+                 font-variant-numeric: tabular-nums; }
+
 .doc { position: relative; margin-bottom: 34px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
 .doc .meta { color: var(--dim); font-size: 13px; margin-bottom: 8px; }
@@ -267,10 +283,20 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 
 JS = """
 const box = document.getElementById('filter');
-box.addEventListener('input', () => {
+const chips = Array.from(document.querySelectorAll('.chip'));
+
+// Оба фильтра — поле и чипы итога — сходятся здесь. Раздельные
+// обработчики второй раз показывали бы строки, спрятанные первым.
+// Ни одного нажатого чипа значит «любой итог», а не «никакой»: иначе
+// первое же нажатие пустило бы страницу в ноль строк.
+function apply() {
   const q = box.value.trim().toLowerCase();
+  const on = chips.filter(c => c.getAttribute('aria-pressed') === 'true')
+                  .map(c => c.dataset.s);
   document.querySelectorAll('tbody tr').forEach(tr => {
-    tr.classList.toggle('hidden', q && !tr.dataset.k.includes(q));
+    const hide = (q && !tr.dataset.k.includes(q))
+              || (on.length && !on.includes(tr.dataset.s));
+    tr.classList.toggle('hidden', hide);
   });
   document.querySelectorAll('.doc').forEach(d => {
     const any = d.querySelectorAll('tbody tr:not(.hidden)').length;
@@ -278,9 +304,10 @@ box.addEventListener('input', () => {
   });
   // Свёрнутая таблица прячет как раз то, что искали, поэтому на время
   // фильтра совпадения раскрываются сами. Что человек открыл руками до
-  // фильтра, запоминается и возвращается, когда поле опустеет.
+  // фильтра, запоминается и возвращается, когда фильтр снимут.
+  const active = q || on.length;
   document.querySelectorAll('details.searches').forEach(det => {
-    if (q) {
+    if (active) {
       if (det.dataset.was === undefined) det.dataset.was = det.open ? '1' : '';
       det.open = true;
     } else if (det.dataset.was !== undefined) {
@@ -288,7 +315,16 @@ box.addEventListener('input', () => {
       delete det.dataset.was;
     }
   });
-});
+}
+box.addEventListener('input', apply);
+chips.forEach(c => c.addEventListener('click', () => {
+  // Чипы независимы: можно оставить и находки с родством, и находки без
+  // него. Повторное нажатие снимает — иначе выбранный по ошибке итог
+  // снимался бы только перезагрузкой страницы.
+  c.setAttribute('aria-pressed',
+                 c.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+  apply();
+}));
 
 // Ссылка на родословную стоит и в свёрнутой сводке, внутри <summary>:
 // без этого клик по имени заодно схлопывал бы таблицу, которую человек
@@ -693,6 +729,38 @@ def collect():
                                               kv[1]["year"] or 0, kv[0])))
 
 
+# Порядок чипов — от «ничего нет» к «нашли и знаем кого»: так же читается
+# и сам поиск. Пузырь «не проверена» появляется, только если такие строки
+# есть: сейчас их нет ни одной, и пустой чип обещал бы несуществующий срез.
+CHIP_ORDER = ("no", "maybe", "ok", "wait")
+
+
+def status_chips(searches) -> str:
+    """Фильтр по итогу: три пузыря теми же цветами, что и сами итоги.
+
+    Считается по строкам поисков, а не по документам: у одного документа
+    итоги по двум фамилиям бывают разными, и «дел с находкой» и «находок»
+    — разные числа. Число рядом с чипом — сколько строк он оставит.
+    """
+    seen = {}
+    for r in searches:
+        label, cls = row_badge(r)
+        seen.setdefault(cls, [label, 0])
+        seen[cls][1] += 1
+    if len(seen) < 2:
+        return ""            # выбирать не из чего — фильтр только мешал бы
+    out = ["<div class=chips role=group aria-label='Фильтр по итогу'>"]
+    for cls in CHIP_ORDER:
+        if cls not in seen:
+            continue
+        label, n = seen[cls]
+        out.append(f"<button type=button class='badge chip' data-s='{cls}' "
+                   f"aria-pressed=false>{e(label)}"
+                   f"<span class=n>{n}</span></button>")
+    out.append("</div>")
+    return "".join(out)
+
+
 def render(docs) -> str:
     mark = _mark()
     searches = [r for d in docs.values() for r in d["rows"]]
@@ -721,7 +789,8 @@ def render(docs) -> str:
            "</div>",
            year_strip(docs),
            "<input id=filter type=search placeholder='Фильтр по фамилии, "
-           "документу или странице…' autocomplete=off>"]
+           "документу или странице…' autocomplete=off>",
+           status_chips(searches)]
 
     # Якорь года ставится перед первым делом этого года. Дела уже
     # отсортированы по годам, так что «первое» — это просто смена года.
@@ -828,7 +897,7 @@ def render(docs) -> str:
                 links.append(f"<a{cl} href='{e(url)}/view/?#page={e(p)}' "
                              f"target=_blank>{e(p)}</a>")
             key = " ".join([r["surname"], title, ident, *pages]).lower()
-            out.append(f"<tr data-k='{e(key)}'>")
+            out.append(f"<tr data-k='{e(key)}' data-s='{cls}'>")
             out.append(f"<td class=when>{e(r['date'][:16].replace('T', ' '))}</td>")
             out.append(f"<td class=surname>{e(r['surname'])}</td>")
             out.append(f"<td class=num data-l='Кандидатов'>{r['hits']}</td>")

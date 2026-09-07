@@ -1,6 +1,7 @@
 """Проверка на реальных искажениях: дореформенная орфография,
 падежи и типичные подмены букв в OCR."""
 
+import re
 import sys
 from catalog import SKIP_BY_ID, build, classify, years_covered
 from journal import markup, render, year_strip
@@ -62,12 +63,12 @@ def main():
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
-           + years_suite() + persons_suite() + doclinks_suite()
+           + years_suite() + chips_suite() + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite()
            + pamyatnye_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8)
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -463,6 +464,40 @@ CASES_YEARS = [
       "c": _doc(None, "found")},
      ["class='year noyear maybe'", "<i class=more>2</i>"]),
 ]
+
+
+def chips_suite():
+    """Фильтр по итогу: пузыри и метка статуса на строке.
+
+    Строка таблицы несёт свой итог в `data-s`, и по нему её прячет
+    фильтр. Без метки на строке фильтровать пришлось бы по тексту
+    вердикта, где слова «не найдена» стоят и в разборе отклонённых
+    кандидатов.
+    """
+    bad = 0
+    print("\nфильтр по итогу:")
+    html = render({"a": _doc(1899, "absent"), "b": _doc(1900, "found"),
+                   "c": _doc(1901, "found", kin=["7"])})
+    checks = [
+        ("пузырь «не найдена»", "data-s='no'" in html),
+        ("пузырь «родство не установлено»", "data-s='maybe'" in html),
+        ("пузырь «родство подтверждено»", "data-s='ok'" in html),
+        ("итог назван на каждой строке",
+         len(re.findall(r"<tr data-k='[^']*' data-s='\w+'>", html))
+         == html.count("<tr data-k=")),
+        ("счёт рядом с пузырём", "<span class=n>1</span>" in html),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+
+    # Выбирать не из чего — фильтр не рисуется вовсе: пузырь-одиночка
+    # только притворялся бы фильтром, ничего не отсекая.
+    one = render({"a": _doc(1899, "absent"), "b": _doc(1900, "absent")})
+    ok = "class=chips" not in one
+    bad += not ok
+    print(f"  [{'ok ' if ok else 'FAIL'}] при одном итоге фильтра нет")
+    return bad
 
 
 def years_suite():

@@ -26,8 +26,10 @@ from docstore import doc_dir, load_meta
 THRESHOLD = 60.0          # ниже — странице верить нельзя
 
 
-def page_stats(img):
-    out = subprocess.run(["tesseract", str(img), "-", "-l", "rus", "--psm", "6", "tsv"],
+def page_stats(args):
+    img, psm = args
+    out = subprocess.run(["tesseract", str(img), "-", "-l", "rus",
+                          "--psm", psm, "tsv"],
                          capture_output=True, text=True).stdout
     rows = [r for r in csv.DictReader(io.StringIO(out), delimiter="\t",
                                       quoting=csv.QUOTE_NONE)
@@ -42,6 +44,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("ident")
     ap.add_argument("--threshold", type=float, default=THRESHOLD)
+    ap.add_argument("--psm", default="6",
+                    help="тот же режим, каким страницу распознавали: "
+                         "у газет 4, у книг 6")
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--refetch", action="store_true",
                     help="дотянуть вычищенные сканы, чтобы измерить том целиком")
@@ -72,7 +77,7 @@ def main():
         sys.exit(f"нет сканов в {d/'scans'} — сначала fetch.py")
 
     with ThreadPoolExecutor(a.jobs) as ex:
-        stats = sorted(ex.map(page_stats, scans))
+        stats = sorted(ex.map(page_stats, [(f, a.psm) for f in scans]))
 
     weak = [(p, c) for p, c, n in stats if c < a.threshold]
     confs = [c for _, c, _ in stats]
@@ -87,7 +92,7 @@ def main():
               "…" if len(weak) > 40 else "")
 
     (d / "quality.json").write_text(json.dumps(
-        {"threshold": a.threshold,
+        {"threshold": a.threshold, "psm": a.psm,
          "pages": {str(p): round(c, 1) for p, c, _ in stats},
          "weak": [p for p, _ in weak]}, ensure_ascii=False, indent=1),
         encoding="utf-8")

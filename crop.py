@@ -16,7 +16,7 @@
 фамилию целиком, оставив один адрес.
 """
 
-import argparse, csv, io, pathlib, subprocess, sys, tempfile
+import argparse, csv, io, json, pathlib, subprocess, sys, tempfile
 
 from docstore import allow_big_scans, doc_dir
 from fetch import ensure_page
@@ -96,12 +96,24 @@ def main():
     ap.add_argument("--pad", type=int, default=25, help="поля вокруг слова, px")
     ap.add_argument("--line", type=int, default=0,
                     help="если >0, вырезать всю строку такой высоты вокруг слова")
+    ap.add_argument("--psm", help="режим разбора страницы; по умолчанию тот, "
+                                  "которым документ распознавали")
     a = ap.parse_args()
 
     from PIL import Image
 
     d = doc_dir(a.ident)
     img = ensure_page(a.ident, a.page)   # дотянет, если скан был вычищен
+
+    # Читать вырезку надо тем же режимом, каким читали страницу: у газеты
+    # это `--psm 4`, и с книжным `6` TSV-проход сваливает колонки в кашу,
+    # а слово, которое поиск видел, здесь не находится вовсе. Режим
+    # записан в quality.json тем же прогоном, что и уверенность.
+    psm = a.psm
+    if not psm:
+        qf = d / "quality.json"
+        psm = (json.loads(qf.read_text(encoding="utf-8")).get("psm", "6")
+               if qf.exists() else "6")
 
     stem, fragile = stem_query(a.surname)
     thr = a.threshold if a.threshold is not None else default_threshold(stem)
@@ -110,7 +122,7 @@ def main():
     out.mkdir(exist_ok=True)
     im = Image.open(img)
     found = 0
-    seen = list(words(img))
+    seen = list(words(img, psm=psm))
     if not any(matches(stem, t, thr, fragile) for t, _ in seen):
         seen = list(words_in_bands(img))     # страница не далась — читаем полосами
     for text, (x0, y0, x1, y1) in seen:

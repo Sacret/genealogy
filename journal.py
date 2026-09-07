@@ -97,9 +97,9 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -16px 0 26px; }
 .badge.chip {
   font-family: inherit; font-size: 12.5px; line-height: 1.4; cursor: pointer;
-  padding: 5px 13px; border: 1px solid transparent; opacity: .62;
+  padding: 5px 13px; border: 1px solid transparent; opacity: .75;
 }
-.badge.chip:hover { opacity: .85; }
+.badge.chip:hover { opacity: .92; }
 .badge.chip[aria-pressed=true] { opacity: 1; border-color: currentColor; }
 .badge.chip:focus-visible { outline: 2px solid var(--accent);
                             outline-offset: 2px; }
@@ -754,8 +754,11 @@ def status_chips(searches) -> str:
         if cls not in seen:
             continue
         label, n = seen[cls]
-        out.append(f"<button type=button class='badge chip' data-s='{cls}' "
-                   f"aria-pressed=false>{e(label)}"
+        # Класс цвета обязателен рядом с `chip`: он и красит пузырь.
+        # Без него `data-s` остаётся только для фильтра, а все три
+        # кнопки выходят одинаково серыми.
+        out.append(f"<button type=button class='badge {cls} chip' "
+                   f"data-s='{cls}' aria-pressed=false>{e(label)}"
                    f"<span class=n>{n}</span></button>")
     out.append("</div>")
     return "".join(out)

@@ -104,7 +104,11 @@ def confirmed_hits(ident: str):
 GITIGNORE = ROOT / ".gitignore"
 MARK_BEGIN = "# --- страницы находок: список ведёт prune.py ---"
 MARK_END = "# --- конец списка находок ---"
-KEEP_LINE = re.compile(r"^!(bv\d+/scans/p\d+\.jpg)\s*$")
+# Префикс — любой, не только bv: находка в газете лежит под pn, и с
+# `bv` в этом выражении её строка не опознавалась как уже стоящая в
+# файле, а дописывалась заново на каждом проходе. За один вечер
+# страница pn0024347 попала в .gitignore девять раз.
+KEEP_LINE = re.compile(r"^!([a-z]{2}\d+/scans/p\d+\.jpg)\s*$")
 ANCHOR = "*/scans/*"
 
 

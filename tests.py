@@ -66,7 +66,7 @@ def main():
            + pagelist_suite() + bigscan_suite()
            + pamyatnye_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
-             + len(CASES_SPELLING) + len(CASES_CATALOG) + 3 + len(CASES_YEARS)
+             + len(CASES_SPELLING) + len(CASES_CATALOG) + 5 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
@@ -225,6 +225,21 @@ def catalog_suite():
         ("причина названа", bool(got) and got[0].get("причина") == SKIP_BY_ID[ident]),
         ("в очереди его нет",
          all(r["id"] != ident for q in out["очередь"].values() for r in q)),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+
+    # Длинная серия отсеивается по заголовку, но с причиной — иначе том
+    # лежал бы среди отсеянных по теме, а тема у него как раз подходящая.
+    rec = {"id": "bv0000209",
+           "title": "Сборник правительственных распоряжений по казачьим "
+                    "войскам: Т. 1"}
+    out = build({"bv0000209": rec})
+    got = [r for r in out["не_будут_просмотрены"] if r["id"] == "bv0000209"]
+    checks = [
+        ("серия отсеяна по заголовку", bool(got)),
+        ("причина названа", bool(got) and "имён нет" in got[0].get("причина", "")),
     ]
     for name, ok in checks:
         bad += not ok

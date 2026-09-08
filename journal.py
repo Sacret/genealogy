@@ -177,7 +177,7 @@ td.when, td.num { color: var(--dim); font-size: 13px; white-space: nowrap; }
 .note em { font-style: italic; color: var(--ink); }
 .note strong { font-weight: 650; color: var(--ink); letter-spacing: .01em; }
 
-.pages { font-size: 13px; line-height: 1.9; }
+.pages { font-size: 13px; }
 .pages a { color: var(--accent); text-decoration: none;
            border-bottom: 1px solid transparent; }
 .pages a:hover { border-bottom-color: var(--accent); }

@@ -28,7 +28,7 @@ import argparse, csv, io, json, pathlib, subprocess, sys, tempfile
 
 from docstore import allow_big_scans, doc_dir
 from fetch import ensure_page
-from rescue import BAND, STEP
+from rescue import BAND, STEP, columns
 from surnamefind.normalize import normalize
 from surnamefind.search import stem_query
 from surnamefind.match import prefix_distance, default_threshold, score
@@ -67,53 +67,25 @@ def words_in_bands(img, lang="rus", psm="6"):
     страницы — соседние строки не мешают, и Tesseract не пытается
     разложить два столбца в один поток.
 
-    Полосы идут внахлёст, поэтому одно и то же слово приходит дважды, и
-    повторы отсеиваются по пересечению боксов, а не по тексту: соседние
+    Полосы идут внахлёст, поэтому одно и то же слово приходит дважды.
+    Повторы отсеиваются по пересечению боксов, а не по тексту: соседние
     полосы читают слово чуть по-разному («Могучевъ» и «Могучевь»), и
-    отсев по тексту пропускал обе вырезки в журнал.
+    отсев по тексту пропускал обе вырезки в журнал. Но отсеивать надо
+    после проверки на совпадение, а не здесь: иначе побеждает то
+    прочтение, которое пришло первым, а совпавшее — выбрасывается.
+    Так пропал кандидат 'вачмазинь' на стр. 2 выпуска pn0024162: поиск
+    его видел, а вырезать было нечего. Поэтому отсюда идут все слова
+    подряд, а дубли снимает main().
     """
     from PIL import Image
     im = Image.open(img)
     w, h = im.size
-    seen = []
     with tempfile.TemporaryDirectory() as tmp:
         band = pathlib.Path(tmp) / "band.jpg"
         for top in range(0, h - 60, STEP):
             im.crop((0, top, w, min(h, top + BAND))).save(band, dpi=(400, 400))
             for text, (x0, y0, x1, y1) in words(band, lang, psm):
-                box = (x0, y0 + top, x1, y1 + top)
-                if any(overlap(box, b) > 0.5 for b in seen):
-                    continue
-                seen.append(box)
-                yield text, box
-
-
-def columns(img, top=200, foot=40):
-    """Границы колонок полосы — по провалам плотности чёрного.
-
-    Вертикальных линеек между столбцами газета не печатает, а межколонник
-    узок, поэтому провал ищется не до нуля: порог берётся долей от
-    распределения, и в границы попадает середина каждого провала. Шапка
-    и подвал отрезаются — они идут во всю ширину и провалы заплывают.
-    """
-    import numpy as np
-    from PIL import Image
-
-    im = Image.open(img) if not hasattr(img, "size") else img
-    a = np.array(im.convert("L").crop((0, top, im.width, im.height - foot)))
-    dark = (a < 150).sum(axis=0)
-    smooth = np.convolve(dark, np.ones(31) / 31, mode="same")
-    floor = np.percentile(smooth[smooth > 0], 20)
-    dips, inside = [], False
-    for x, v in enumerate(smooth):
-        if v < floor and not inside:
-            start, inside = x, True
-        elif v >= floor and inside:
-            if x - start > 10:
-                dips.append((start + x) // 2)
-            inside = False
-    edges = [0] + dips + [im.width]
-    return [(a, b) for a, b in zip(edges, edges[1:]) if b - a > 200]
+                yield text, (x0, y0 + top, x1, y1 + top)
 
 
 def words_in_columns(img, lang="rus", psm="6"):
@@ -176,13 +148,21 @@ def main():
         seen = list(words_in_bands(img))     # страница не далась — читаем полосами
     if not any(matches(stem, t, thr, fragile) for t, _ in seen):
         seen = list(words_in_columns(img))   # и полосы не дались — по колонкам
-    for text, (x0, y0, x1, y1) in seen:
+    # Сначала отбор по совпадению, и только потом отсев наложившихся
+    # боксов: порядок обратный стоил бы совпавшего прочтения.
+    hits, boxes = [], []
+    for text, box in seen:
         norm = normalize(text)
         if not norm:
             continue
-        cost, _ = prefix_distance(stem, norm, fragile=fragile)
-        if cost > thr:
+        if prefix_distance(stem, norm, fragile=fragile)[0] > thr:
             continue
+        if any(overlap(box, b) > 0.5 for b in boxes):
+            continue
+        boxes.append(box)
+        hits.append((text, box, norm))
+
+    for text, (x0, y0, x1, y1), norm in hits:
         found += 1
         if a.line:
             box = (0, max(0, y0 - a.line // 2), im.width,
@@ -195,7 +175,8 @@ def main():
         print(f"{dst}   {text!r}  score {score(stem, norm, fragile=fragile):.3f}")
     if not found:
         print(f"на стр. {a.page} совпадений не нашлось ни по целой странице, "
-              f"ни полосами (TSV-проход режет слова иначе, чем построчный)")
+              f"ни полосами, ни по колонкам (TSV-проход режет слова иначе, "
+              f"чем построчный)")
 
 
 if __name__ == "__main__":

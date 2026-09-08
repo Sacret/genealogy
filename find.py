@@ -36,10 +36,13 @@ def load_pages(ident: str):
     files = sorted((doc_dir(ident) / "ocr").glob("p*.txt"))
     if not files:
         sys.exit(f"нет распознанного текста для {ident} — сначала ocr_pages.py")
-    # Дополнительные прочтения тех же страниц: полосами (rescue.py) и по
-    # бинаризованному скану (prep.py). Ищем по всем сразу — то, что
-    # развалилось в одном прочтении, часто цело в другом.
-    extra = [doc_dir(ident) / "ocr_bands", doc_dir(ident) / "ocr_prep"]
+    # Дополнительные прочтения тех же страниц: полосами и колонками
+    # (rescue.py) и по бинаризованному скану (prep.py). Ищем по всем сразу —
+    # то, что развалилось в одном прочтении, часто цело в другом. Колонки
+    # тут не роскошь: на газетной полосе ниже 45 они единственные и дают
+    # фамилию (Яков Кармазин, стр. 3 выпуска pn0024160).
+    extra = [doc_dir(ident) / "ocr_bands", doc_dir(ident) / "ocr_cols",
+             doc_dir(ident) / "ocr_prep"]
     pages = []
     for f in files:
         t = f.read_text(encoding="utf-8", errors="replace")

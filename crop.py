@@ -14,6 +14,14 @@
 перечитывание полосами, осталась бы без вырезки: так вышло с фельдшером
 Могучевым на стр. 176 тома bv0000031, где основное распознавание съело
 фамилию целиком, оставив один адрес.
+
+Третий проход — по колонкам. Полоса газеты, снятая ниже 45, не даётся ни
+целиком, ни лентами: лента пересекает все столбцы разом и склеивает
+соседние строки. Вырезанная колонка читается как единый блок и отдаёт
+имена, которых не видели первые два прохода. Так нашёлся урядник Яков
+Кармазин в списке присяжных заседателей Донецкого округа на стр. 3
+выпуска pn0024160 (39,7 средней по выпуску): страничный поиск не дал по
+нему ни одного кандидата даже при расширенном пороге.
 """
 
 import argparse, csv, io, json, pathlib, subprocess, sys, tempfile
@@ -80,6 +88,47 @@ def words_in_bands(img, lang="rus", psm="6"):
                 yield text, box
 
 
+def columns(img, top=200, foot=40):
+    """Границы колонок полосы — по провалам плотности чёрного.
+
+    Вертикальных линеек между столбцами газета не печатает, а межколонник
+    узок, поэтому провал ищется не до нуля: порог берётся долей от
+    распределения, и в границы попадает середина каждого провала. Шапка
+    и подвал отрезаются — они идут во всю ширину и провалы заплывают.
+    """
+    import numpy as np
+    from PIL import Image
+
+    im = Image.open(img) if not hasattr(img, "size") else img
+    a = np.array(im.convert("L").crop((0, top, im.width, im.height - foot)))
+    dark = (a < 150).sum(axis=0)
+    smooth = np.convolve(dark, np.ones(31) / 31, mode="same")
+    floor = np.percentile(smooth[smooth > 0], 20)
+    dips, inside = [], False
+    for x, v in enumerate(smooth):
+        if v < floor and not inside:
+            start, inside = x, True
+        elif v >= floor and inside:
+            if x - start > 10:
+                dips.append((start + x) // 2)
+            inside = False
+    edges = [0] + dips + [im.width]
+    return [(a, b) for a, b in zip(edges, edges[1:]) if b - a > 200]
+
+
+def words_in_columns(img, lang="rus", psm="6"):
+    """То же, что words_in_bands, но по колонкам, с пересчётом координат."""
+    from PIL import Image
+
+    im = Image.open(img)
+    with tempfile.TemporaryDirectory() as tmp:
+        col = pathlib.Path(tmp) / "col.jpg"
+        for left, right in columns(im):
+            im.crop((left, 200, right, im.height - 40)).save(col, dpi=(400, 400))
+            for text, (x0, y0, x1, y1) in words(col, lang, psm):
+                yield text, (x0 + left, y0 + 200, x1 + left, y1 + 200)
+
+
 def matches(stem, text, thr, fragile) -> bool:
     """Слово из TSV, похожее на искомую фамилию не хуже порога."""
     norm = normalize(text)
@@ -125,6 +174,8 @@ def main():
     seen = list(words(img, psm=psm))
     if not any(matches(stem, t, thr, fragile) for t, _ in seen):
         seen = list(words_in_bands(img))     # страница не далась — читаем полосами
+    if not any(matches(stem, t, thr, fragile) for t, _ in seen):
+        seen = list(words_in_columns(img))   # и полосы не дались — по колонкам
     for text, (x0, y0, x1, y1) in seen:
         norm = normalize(text)
         if not norm:

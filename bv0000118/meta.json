@@ -2,5 +2,9 @@
   "url": "https://vivaldi.dspl.ru/bv0000118",
   "title": "Журналы заседаний Ростовской-на-Дону Городской Думы: за 1901 год",
   "pages": 780,
-  "dpi": 400
+  "dpi": 400,
+  "pruned": true,
+  "kept_pages": [
+    222
+  ]
 }

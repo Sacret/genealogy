@@ -2,5 +2,9 @@
   "url": "https://vivaldi.dspl.ru/pn0024192",
   "title": "Донские областные ведомости: 1912, № 20 (10 марта)",
   "pages": 4,
-  "dpi": 400
+  "dpi": 400,
+  "pruned": true,
+  "kept_pages": [
+    4
+  ]
 }

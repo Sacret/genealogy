@@ -2,5 +2,7 @@
   "url": "https://vivaldi.dspl.ru/pn0024195",
   "title": "Донские областные ведомости: 1912, № 23 (21 марта)",
   "pages": 6,
-  "dpi": 400
+  "dpi": 400,
+  "pruned": true,
+  "kept_pages": []
 }

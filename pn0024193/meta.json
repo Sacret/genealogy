@@ -2,5 +2,9 @@
   "url": "https://vivaldi.dspl.ru/pn0024193",
   "title": "Донские областные ведомости: 1912, № 21 (14 марта)",
   "pages": 8,
-  "dpi": 400
+  "dpi": 400,
+  "pruned": true,
+  "kept_pages": [
+    2
+  ]
 }

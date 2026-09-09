@@ -2,5 +2,7 @@
   "url": "https://vivaldi.dspl.ru/bv0000279",
   "title": "Сборник правительственных распоряжений по воинской повинности: Т. II",
   "pages": 373,
-  "dpi": 400
+  "dpi": 400,
+  "pruned": true,
+  "kept_pages": []
 }

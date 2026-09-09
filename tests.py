@@ -5,7 +5,7 @@ import re
 import sys
 from catalog import SKIP_BY_ID, build, classify, years_covered
 from journal import markup, render, year_strip
-from docstore import BIG_SCAN_PIXELS, allow_big_scans
+from docstore import BIG_SCAN_PIXELS, ROOT, allow_big_scans
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, kin_persons
 from surnamefind.search import find_in_text, stem_query
@@ -64,11 +64,11 @@ def main():
 
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
            + years_suite() + chips_suite() + persons_suite() + doclinks_suite()
-           + pagelist_suite() + bigscan_suite()
+           + pagelist_suite() + bigscan_suite() + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6)
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 9)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -604,6 +604,58 @@ def pagelist_suite():
         ("порядок числовой", cell.index(">99</a>") < cell.index(">104</a>")),
     ]
     for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+    return bad
+
+
+def namesakes_suite():
+    """Страница с несколькими однофамильцами: подпись одна, а не под каждой.
+
+    `--kin` и `--person` называют страницу, а не место на ней, и журнал
+    ставил эту подпись под каждой вырезкой страницы. Пока вырезка одна,
+    разницы нет; на стр. 35 выпуска pn0024233 их три — Филипп Петрович
+    Кармазин, его сын Анисим и посторонний Василий Демьянов, — и все три
+    оказались подписаны именем Филиппа Петровича, то есть журнал выдал
+    двух однофамильцев за доказанного предка. Ровно та ошибка, от которой
+    заведён `--kin`.
+    """
+    bad = 0
+    print("\nоднофамильцы на одной странице:")
+    crops = sorted((ROOT / "pn0024233" / "crops").glob("p0035_кармазин_*.png"))
+    row = {"surname": "Кармазинъ", "status": "found", "date": "2026-01-01",
+           "verdict": "", "confirmed": ["35"], "kin": ["35"],
+           "persons": {"35": "i0117"},
+           "hits": 9, "pages_with_hits": ["35"]}
+    doc = {"meta": {}, "rows": [row], "coverage": None, "year": 1912}
+    html = render({"pn0024233": doc})
+    cell = html.split("<td class=result>")[1].split("</td>")[0]
+    # Считаем только подписи под вырезками: «родство подтверждено» стоит
+    # ещё и в бейдже самой строки, и он тут ни при чём.
+    heads = re.findall(r"<div class='cap crophead'>.*?</div>", cell, re.S)
+    checks = [
+        ("вырезок на странице три", len(crops) == 3),
+        ("показаны все три", cell.count("<div class=crop>") == 3),
+        ("подпись под вырезками одна", len(heads) == 1),
+        ("и родство в ней названо один раз",
+         sum(h.count("родство подтверждено") for h in heads) == 1),
+        ("имя названо один раз", cell.count("Филипп Петрович Кармазин") == 1),
+        ("сказано, что вырезок несколько", "вырезок несколько" in cell),
+        ("подпись стоит над группой",
+         cell.index("родство подтверждено") < cell.index("<div class=crop>")),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+
+    # Одна вырезка — подпись как была, без оговорки про однофамильцев.
+    one = {**row, "confirmed": ["38"], "kin": ["38"],
+           "persons": {"38": "i0026"}, "surname": "Могучевъ"}
+    solo = render({"pn0024233": {**doc, "rows": [one]}})
+    scell = solo.split("<td class=result>")[1].split("</td>")[0]
+    for name, ok in [("одна вырезка — без оговорки",
+                      "вырезок несколько" not in scell),
+                     ("и с именем", "Алексей Иосифович Могучев" in scell)]:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
     return bad

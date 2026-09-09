@@ -272,6 +272,8 @@ a.year:hover { border-color: var(--accent); }
                                      color: var(--dim); }
 }
 
+.cropgroup { margin-top: 12px; }
+.crophead { margin-bottom: 2px; }
 .crop { margin-top: 8px; }
 .crop img { display: block; max-width: 100%; border: 1px solid var(--line);
             border-radius: 8px; background: #fff; padding: 4px; }
@@ -555,6 +557,28 @@ def crops_for(ident, surname, pages):
         for f in sorted(d.glob(f"p{int(page):04d}_{stem}_*.png")):
             out.append((int(page), f))
     return out
+
+
+def group_by_page(crops):
+    """Вырезки одной страницы — вместе, в порядке, который дал crops_for.
+
+    Подпись про родство и имя человека журнал знает по **странице**:
+    `--kin` и `--person` называют страницу, а не место на ней. Пока
+    вырезка одна, это одно и то же, и подпись можно ставить под
+    картинкой. Когда их несколько, повторённая под каждой подпись
+    объявляет всех однофамильцев одним человеком — а именно так и
+    вышло на стр. 35 выпуска pn0024233, где рядом стоят Филипп
+    Петрович Кармазин, его сын Анисим и посторонний Василий Демьянов:
+    все три вырезки были подписаны именем Филиппа Петровича.
+
+    Поэтому подпись поднимается над группой и произносится один раз,
+    а сами вырезки идут без имён. Разбор, кто из них кто, остаётся
+    в вердикте — там он и был всё это время.
+    """
+    out = OrderedDict()
+    for page, f in crops:
+        out.setdefault(page, []).append(f)
+    return list(out.items())
 
 
 def thumb_uri(path: pathlib.Path, max_w=620) -> str:
@@ -915,18 +939,27 @@ def render(docs) -> str:
                     if r["verdict"] else "")
             shots = ""
             people = roster()
-            for page, f in crops_for(ident, r["surname"], confirmed):
+            for page, files in group_by_page(
+                    crops_for(ident, r["surname"], confirmed)):
                 who = ("родство подтверждено" if str(page) in kin
                        else "родство не установлено")
                 mark_cls = "hit" if str(page) in kin else "maybe"
                 pid = (r.get("persons") or {}).get(str(page))
                 named = (person_link(pid, people[pid]) if pid in people else "")
-                shots += (f"<div class=crop><img alt='{e(r['surname'])}, "
-                          f"стр. {page}' src='{thumb_uri(f)}'>"
-                          f"<div class=cap>стр. {page} — вырезка из скана, "
-                          f"<a href='{e(f.relative_to(ROOT))}'>полный размер</a>"
-                          f" · <span class='badge {mark_cls}'>{who}</span>"
-                          f"{named}</div></div>")
+                many = (" · вырезок несколько: на странице стоят однофамильцы, "
+                        "кто из них кто — сказано в вердикте"
+                        if len(files) > 1 else "")
+                shots += (f"<div class=cropgroup>"
+                          f"<div class='cap crophead'>стр. {page} · "
+                          f"<span class='badge {mark_cls}'>{who}</span>"
+                          f"{named}{many}</div>")
+                shots += "".join(
+                    f"<div class=crop><img alt='{e(r['surname'])}, "
+                    f"стр. {page}' src='{thumb_uri(f)}'>"
+                    f"<div class=cap>вырезка из скана, "
+                    f"<a href='{e(f.relative_to(ROOT))}'>полный размер</a>"
+                    f"</div></div>" for f in files)
+                shots += "</div>"
             out.append(f"<td class=result><span class='badge {cls}'>{label}"
                        f"</span>{note}{shots}</td>")
             out.append("</tr>")

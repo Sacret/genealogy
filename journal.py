@@ -113,6 +113,21 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
    :hover, и нажатое состояние, а вес у всех трёх одинаковый. */
 .badge.chip.zero { opacity: .35; }
 
+/* Подпись для читалки: с глаз уведена, из дерева доступности — нет.
+   display: none выкинул бы её и оттуда. */
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+      overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* Узкое окно: подпись уходит вся, остаются цвет и число. Три чипа со
+   словами занимают здесь больше строки, а цвет в журнале и так значит
+   ровно это — он назван в подписи под полосой лет и красит каждый итог
+   в таблице. Чем чип был, говорят title и подпись для читалки. */
+@media (max-width: 700px) {
+  .badge.chip .lbl { display: none; }
+  .badge.chip .n { margin-left: 0; opacity: 1; min-width: 1.6em;
+                   display: inline-block; text-align: center; }
+}
+
 /* Сколько строк осталось после фильтра. Пока фильтр не тронут, строки
    нет вовсе: без фильтра это число уже стоит в счётчиках наверху. */
 .count { display: none; color: var(--dim); font-size: 13px;
@@ -962,18 +977,22 @@ def status_chips(searches) -> str:
         if cls not in seen:
             continue
         label, n = seen[cls]
-        # Хвост про родство отделён от слова «найдена»: в севшей шапке,
-        # когда набрана фамилия, места на него нет, и CSS его гасит —
-        # остаются «найдена» и число, а синее от зелёного отличает цвет,
-        # как и везде в журнале. Полная подпись при этом никуда не
-        # девается: она в aria-label, иначе для читалки обе кнопки
-        # назывались бы одинаково, а цвет ей не слышен.
+        # Подпись чипа набрана трижды, и это не описка. Видимая часть
+        # разобрана на слово и хвост про родство, потому что гаснут они
+        # порознь: в севшей шапке с набранной фамилией уходит хвост, на
+        # узком экране — вся подпись, и остаются цвет с числом. Читалке
+        # же нужна подпись целиком и всегда, поэтому рядом лежит третья,
+        # уведённая с глаз: aria-label тут не годится — он перебивает
+        # содержимое кнопки вместе с числом, а число меняется на ходу и
+        # в атрибуте протухло бы.
         head, _, tail = label.partition(", ")
         out.append(f"<button type=button class='badge {cls} chip' "
                    f"data-s='{cls}' data-n='{n}' aria-pressed=false "
-                   f"aria-label='{e(label)}'>{e(head)}"
+                   f"title='{e(label)}'>"
+                   f"<span class=sr>{e(label)}</span>"
+                   f"<span class=lbl aria-hidden=true>{e(head)}"
                    + (f"<span class=tail>, {e(tail)}</span>" if tail else "")
-                   + f"<span class=n>{n}</span></button>")
+                   + f"</span><span class=n>{n}</span></button>")
     out.append("</div>")
     return "".join(out)
 

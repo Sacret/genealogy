@@ -202,7 +202,7 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 @media (max-width: 760px) { .bar.stuck .count { display: none; } }
 @media (max-width: 520px) { .bar.stuck h1 .name { display: none; } }
 
-.doc { position: relative; margin-bottom: 34px; }
+.doc { margin-bottom: 34px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
 .doc .meta { color: var(--dim); font-size: 13px; margin-bottom: 8px; }
 .cov { font-size: 12.5px; color: var(--dim); margin-bottom: 12px;
@@ -319,9 +319,9 @@ a.year:hover { border-color: var(--accent); }
 .year-mark, .doc { scroll-margin-top: calc(var(--stuck-h, 0px) + 16px); }
 .year-mark { height: 0; }
 
-/* Видимая метка года — отдельно от якоря: якорь лежит снаружи секции,
+/* Видимая метка года — отдельно от якоря: якорь лежит снаружи блока,
    чтобы ссылка из полосы работала и при включённом фильтре, а надпись
-   стоит внутри и вместе с секцией исчезает — иначе год висел бы над
+   стоит внутри и вместе с блоком исчезает — иначе год висел бы над
    пустотой.
    Годы в журнале идут подряд, но заголовки дел названы книгами, а не
    годами, и на прокрутке ряд карточек читается как сплошной. Надпись
@@ -335,17 +335,29 @@ a.year:hover { border-color: var(--accent); }
 .year-tag::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 /* Поле слева существует, только когда колонка (1000px) и поля тела
    разошлись достаточно широко: при 1180px до края окна остаётся ещё
-   с десяток пикселей, ниже — метка обрезалась бы. */
+   с десяток пикселей, ниже — метка обрезалась бы.
+   В этом поле метка ещё и едет со страницей: год стоит над первым делом,
+   но принадлежит всей пачке, а пачка в иной год длиннее экрана — уехавшая
+   вверх надпись оставила бы дела без года. Поэтому метка растянута на всю
+   высоту блока (сверху донизу, но абсолютом — места в колонке не занимает),
+   а надпись внутри липнет к верху окна, пока блок не кончится, и уходит
+   вместе с последним делом года. Отступ сверху — на высоту севшей шапки,
+   иначе год оказался бы под ней. В узком окне ничего этого нет: там
+   надпись — строка в потоке, и липнуть ей некуда. */
 @media (min-width: 1180px) {
+  .year-block { position: relative; }
   .year-tag {
-    display: block; position: absolute; left: -76px; top: 3px; width: 60px;
-    margin: 0; text-align: right; font-size: 13px; letter-spacing: .04em;
+    display: block; position: absolute; left: -76px; top: 3px; bottom: 0;
+    width: 60px; margin: 0; text-align: right; font-size: 13px;
+    letter-spacing: .04em;
   }
   .year-tag::after { display: none; }
+  .year-tag span { position: sticky; display: block;
+                   top: calc(var(--stuck-h, 0px) + 16px); }
 }
-/* Метка есть у каждого дела, а видна у первого в своём году — остальные
-   гасит этот класс. Выше по специфичности правила в @media, так что
-   гасит и на широком экране, где метка уходит в поле слева. */
+/* Блок, из которого фильтр выбрал все дела до одного: гасим и метку,
+   иначе год висел бы над пустотой. Выше по специфичности правила в
+   @media, так что гасит и на широком экране. */
 .year-tag.off { display: none; }
 .years-note { color: var(--dim); font-size: 12.5px; margin: 0 0 26px;
               max-width: 80ch; }
@@ -431,18 +443,21 @@ function apply() {
   // всё — поле, чипы и счётчик остатка, — и хвост про родство в неё уже
   // не входит. Развёрнутой шапке тесно не бывает, подпись в ней целая.
   bar.classList.toggle('q', !!q);
-  // Метка года принадлежит всему блоку года, а не первому делу в списке:
-  // если фильтр спрятал именно его, надпись переезжает на первое
-  // уцелевшее дело того же года. Без фильтра всё возвращается на место.
-  // Дело, по которому ещё не искали, строк не имеет вовсе — при снятом
-  // фильтре ему прятаться не за что.
-  let year = null, docs = 0;
-  document.querySelectorAll('.doc').forEach(d => {
-    const any = !active || d.querySelectorAll('tbody tr:not(.hidden)').length;
-    d.style.display = any ? '' : 'none';
-    const tag = d.querySelector('.year-tag');
-    if (tag) tag.classList.toggle('off', !any || d.dataset.year === year);
-    if (any) { year = d.dataset.year; docs++; }
+  // Метка года — одна на блок и стоит над ним, так что переезжать ей
+  // никуда не нужно: фильтр, спрятавший первое дело года, просто
+  // укорачивает блок сверху. Гаснет метка только у блока, из которого
+  // выбрали все дела до одного. Дело, по которому ещё не искали, строк не
+  // имеет вовсе — при снятом фильтре ему прятаться не за что.
+  let docs = 0;
+  document.querySelectorAll('.year-block').forEach(b => {
+    let left = 0;
+    b.querySelectorAll('.doc').forEach(d => {
+      const any = !active || d.querySelectorAll('tbody tr:not(.hidden)').length;
+      d.style.display = any ? '' : 'none';
+      if (any) { left++; docs++; }
+    });
+    const tag = b.querySelector('.year-tag');
+    if (tag) tag.classList.toggle('off', !left);
   });
   // Сколько осталось — и строк, и документов сразу: одна фамилия тянется
   // через десятки книг, и «12 поисков» само по себе не говорит, много это
@@ -1043,36 +1058,34 @@ def render(docs) -> str:
            # распорка держит её прежнюю высоту, и страница не дёргается.
            "<div class=barspace id=barspace></div>"]
 
-    # Якорь года ставится перед первым делом этого года. Дела уже
-    # отсортированы по годам, так что «первое» — это просто смена года.
-    # Якорь стоит снаружи секции нарочно: фильтр по фамилии прячет саму
-    # секцию, а ссылка из полосы лет должна вести куда-то и тогда.
-    seen_year = object()
-    starts_noyear = True          # первое дело без года получит свой якорь
+    # Дела одного года собраны в блок, и метка года стоит над блоком, а не
+    # у первого дела: год — свойство всей пачки. На широком экране метка
+    # едет по левому полю до последнего дела своего года, и блок задаёт ей
+    # границы. Дела уже отсортированы по годам, так что новая пачка — это
+    # просто смена года; дела без года идут последними и все подряд, так
+    # что пачка у них одна, к ней и ведёт пузырь «без года».
+    # Якорь стоит снаружи блока нарочно: фильтр по фамилии прячет и дела, и
+    # метку, а ссылка из полосы лет должна вести куда-то и тогда.
+    seen_year, open_block = object(), False
     for ident, d in docs.items():
         meta, rows = d["meta"], d["rows"]
         title = meta.get("title") or ident
         url = meta.get("url", "")
-        starts_year = bool(d.get("year")) and d["year"] != seen_year
-        if starts_year:
-            seen_year = d["year"]
-            out.append(f"<div class=year-mark id='{year_anchor(seen_year)}'></div>")
-        # Дела без года идут последними и все подряд, так что якорь нужен
-        # один — на первом из них, куда и ведёт пузырь «без года».
-        head_noyear = d.get("year") is None and starts_noyear
-        if head_noyear:
-            starts_noyear = False
-            out.append(f"<div class=year-mark id='{NOYEAR_ANCHOR}'></div>")
-        label = str(d["year"]) if d.get("year") else "без года"
-        out.append(f"<section class=doc id='{e(ident)}' data-year='{e(label)}'>")
-        # Метка стоит у каждого дела, но погашена у всех, кроме первого в
-        # своём году: год — свойство всего блока, а фильтр по фамилии
-        # может спрятать как раз первое дело. Тогда JS зажигает метку у
-        # первого уцелевшего, и блок не остаётся без года.
-        # Год уже назван в строке под заголовком, так что метка — чистая
-        # навигация глазом, и читалке её повторять незачем.
-        off = "" if starts_year or head_noyear else " off"
-        out.append(f"<div class='year-tag{off}' aria-hidden=true>{label}</div>")
+        if d.get("year") != seen_year:
+            if open_block:
+                out.append("</div>")
+            seen_year, open_block = d.get("year"), True
+            label = str(seen_year) if seen_year else "без года"
+            anchor = year_anchor(seen_year) if seen_year else NOYEAR_ANCHOR
+            out.append(f"<div class=year-mark id='{anchor}'></div>")
+            out.append("<div class=year-block>")
+            # Год уже назван в строке под заголовком каждого дела, так что
+            # метка — чистая навигация глазом, и читалке её повторять
+            # незачем. Надпись обёрнута в span: на широком экране липнет к
+            # верху окна именно он, а сама метка растянута на блок.
+            out.append("<div class=year-tag aria-hidden=true>"
+                       f"<span>{label}</span></div>")
+        out.append(f"<section class=doc id='{e(ident)}'>")
         out.append(f"<h2>{e(title)}</h2>")
         bits = [f"<code>{e(ident)}</code>"]
         if d.get("year"):
@@ -1188,6 +1201,8 @@ def render(docs) -> str:
             out.append("</tr>")
         out.append("</tbody></table></details></section>")
 
+    if open_block:
+        out.append("</div>")
     out.append("<footer>Пересобирается автоматически при каждом поиске. "
                "Источник — <code>&lt;документ&gt;/searches.jsonl</code>.</footer>")
     out.append(f"</div><script>{JS}</script></body></html>")

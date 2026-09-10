@@ -517,46 +517,52 @@ def years_suite():
         bad += 1
         print("  [FAIL] одиночный год помечен цифрой")
 
-    # Надпись с годом стоит внутри секции и вместе с ней прячется под
-    # фильтром, чтобы не висеть над пустотой. Но год — свойство всего
-    # блока, а не первого дела в списке: надпись заготовлена у каждого
-    # дела и погашена классом `off`, и если фильтр спрячет первое дело
-    # года, JS зажжёт её у первого уцелевшего. Якорь для ссылки из
-    # полосы — наоборот, снаружи секции, и потому переживает фильтр.
+    # Дела одного года собраны в блок, надпись с годом стоит над блоком —
+    # одна на всю пачку — и вместе с блоком прячется под фильтром, чтобы не
+    # висеть над пустотой. На широком экране блок задаёт метке границы: она
+    # едет с прокруткой до последнего дела своего года. Якорь для ссылки из
+    # полосы — снаружи блока, и потому переживает фильтр.
     html = render({"a": _doc(1873, "absent"), "b": _doc(1874, "absent"),
                    "c": _doc(1874, "found")})
     checks = [
-        ("надпись заготовлена у каждого дела",
-         html.count("class='year-tag") == 3),
-        ("горит одна на год", html.count("class='year-tag'") == 2),
-        ("лишняя погашена",
-         "<section class=doc id='c' data-year='1874'>\n"
-         "<div class='year-tag off' aria-hidden=true>1874" in html),
-        ("надпись внутри секции",
-         "<section class=doc id='b' data-year='1874'>\n"
-         "<div class='year-tag' aria-hidden=true>1874" in html),
+        ("блок на каждый год", html.count("<div class=year-block>") == 2),
+        ("надпись одна на блок", html.count("class=year-tag") == 2),
+        ("надпись открывает блок",
+         "<div class=year-block>\n"
+         "<div class=year-tag aria-hidden=true><span>1874</span></div>\n"
+         "<section class=doc id='b'>" in html),
+        ("оба дела года в одном блоке",
+         html.index("<section class=doc id='b'>")
+         < html.index("<section class=doc id='c'>")
+         < html.index("</div>\n<footer>")),
+        ("блок закрыт до следующего года",
+         html.index("<section class=doc id='a'>")
+         < html.index("</div>\n<div class=year-mark id='g1874'>")),
         ("якорь остаётся снаружи",
-         html.index("id='g1874'")
-         < html.index("<section class=doc id='b' data-year='1874'>")),
+         html.index("id='g1874'") < html.index("<div class=year-block>\n"
+                                               "<div class=year-tag "
+                                               "aria-hidden=true>"
+                                               "<span>1874</span>")),
     ]
     for name, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
 
-    # Дела без года идут последними и подряд: якорь ставится один, на
-    # первом из них, иначе ссылка из полосы вела бы в середину пачки.
+    # Дела без года идут последними и подряд: пачка у них одна, и якорь с
+    # надписью ставятся один раз, иначе ссылка из полосы вела бы в середину
+    # пачки.
     html = render({"a": _doc(1873, "absent"), "b": _doc(None, "absent"),
                    "c": _doc(None, "absent")})
     checks = [
         ("якорь без года один", html.count("id='no-year'") == 1),
         ("якорь перед первым делом без года",
          html.index("id='no-year'")
-         < html.index("<section class=doc id='b' data-year='без года'>")
-         < html.index("<section class=doc id='c' data-year='без года'>")),
-        ("надпись «без года» горит раз",
-         html.count("<div class='year-tag' aria-hidden=true>без года") == 1),
-        ("у второго дела без года надпись погашена",
-         html.count("<div class='year-tag off' aria-hidden=true>без года") == 1),
+         < html.index("<section class=doc id='b'>")
+         < html.index("<section class=doc id='c'>")),
+        ("надпись «без года» одна",
+         html.count("<span>без года</span>") == 1),
+        ("оба дела без года в одном блоке",
+         html.count("<div class=year-block>") == 2),
     ]
     for name, ok in checks:
         bad += not ok

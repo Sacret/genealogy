@@ -393,6 +393,55 @@ a.year:hover { border-color: var(--accent); }
 .crop img { display: block; max-width: 100%; border: 1px solid var(--line);
             border-radius: 8px; background: #fff; padding: 4px; }
 .crop .cap { color: var(--dim); font-size: 12px; margin-top: 4px; }
+
+/* Вырезка в строке — скан в натуральную величину, четыреста пикселей по
+   ширине: слово видно, а написание по буквам уже нет. Клик открывает её
+   поверх страницы, растянутой под окно. Открывает кнопка, а не картинка
+   со слушателем: до вырезки надо доходить и с клавиатуры. */
+.crop .shot { display: block; padding: 0; border: 0; background: none;
+              font: inherit; cursor: zoom-in; border-radius: 8px; }
+.crop .shot:focus-visible { outline: 2px solid var(--accent);
+                            outline-offset: 3px; }
+
+.lb { padding: 0; border: 1px solid var(--line); border-radius: 12px;
+      background: var(--card); color: var(--ink);
+      width: min(1080px, 94vw); max-width: 94vw;
+      height: min(720px, 88vh); max-height: 88vh; overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .35); }
+/* Раскладка — только открытому окну: display в правиле без [open] перебил
+   бы браузерное display: none, и окно стояло бы в странице всегда. */
+.lb[open] { display: flex; flex-direction: column; }
+.lb::backdrop { background: rgba(0, 0, 0, .55); }
+.lbbar { display: flex; align-items: center; gap: 8px; flex: none;
+         padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.lbtitle { font-size: 14px; font-weight: 600; margin-right: auto;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lbbar button, .lbbar a { font: inherit; font-size: 13px; line-height: 1.4;
+       color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+       border-radius: 8px; padding: 4px 10px; cursor: pointer;
+       text-decoration: none; }
+.lbbar button:hover, .lbbar a:hover { border-color: var(--accent); }
+.lbbar button:focus-visible, .lbbar a:focus-visible {
+       outline: 2px solid var(--accent); outline-offset: 2px; }
+.lbzoom { color: var(--dim); font-size: 12.5px; min-width: 3.6em;
+          text-align: center; font-variant-numeric: tabular-nums; }
+.lbstage { flex: 1; overflow: auto; background: var(--bg);
+           overscroll-behavior: contain; }
+.lbstage.grab { cursor: grabbing; }
+/* Подложка тянется по картинке и не меньше окна: обычный блок в прокрутке
+   шире себя не станет, и увеличенная вырезка обрезалась бы слева — домотать
+   до её начала было бы нечем. */
+.lbpad { display: inline-flex; align-items: center; justify-content: center;
+         min-width: 100%; min-height: 100%; padding: 16px; }
+.lbpad img { display: block; background: #fff; padding: 6px;
+             border-radius: 6px; user-select: none; -webkit-user-drag: none; }
+
+/* Узкое окно: заголовок уезжает под кнопки, чтобы «полный размер» и
+   крестик не выдавливались за край. */
+@media (max-width: 700px) {
+  .lbbar { flex-wrap: wrap; }
+  .lbtitle { order: 2; flex: 1 0 100%; margin-right: 0; }
+}
 .empty { color: var(--dim); }
 footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
          border-top: 1px solid var(--line); padding-top: 14px; }
@@ -543,8 +592,113 @@ function sync(force) {
   space.style.height = on ? full + 'px' : '0px';
 }
 
+// Окно с вырезкой. Вырезка мелкая — сотня пикселей в высоту, — и в строке
+// журнала она годится, чтобы узнать слово, но не чтобы читать буквы. Здесь
+// она открывается во весь экран и тянется дальше кнопками: спор о том, «ъ»
+// там или «ь», решается только увеличением.
+const lb = document.getElementById('lb');
+const lbimg = document.getElementById('lbimg');
+const stage = document.getElementById('lbstage');
+const zlabel = document.getElementById('lbzoom');
+// Свои размеры картинки берём у превью: оно уже нарисовано, а у картинки в
+// окне naturalWidth появляется только после загрузки — считать по нему
+// значило бы мерить нули. Они же и мерка увеличения: 100% — это вырезка
+// такой, какой она стоит в строке, независимо от того, сколько пикселей
+// в самом скане.
+let nw = 1, nh = 1, zoom = 1, want = 0;
+
+function setZoom(z) {
+  const pw = lbimg.offsetWidth || 1, ph = lbimg.offsetHeight || 1;
+  // Что было в середине окна, там и остаётся: без пересчёта прокрутки
+  // увеличение уводило бы вырезку в левый верхний угол.
+  const cx = (stage.scrollLeft + stage.clientWidth / 2) / pw;
+  const cy = (stage.scrollTop + stage.clientHeight / 2) / ph;
+  zoom = Math.min(16, Math.max(.5, z));
+  lbimg.style.width = Math.round(nw * zoom) + 'px';
+  zlabel.textContent = Math.round(zoom * 100) + '%';
+  stage.scrollLeft = cx * lbimg.offsetWidth - stage.clientWidth / 2;
+  stage.scrollTop = cy * lbimg.offsetHeight - stage.clientHeight / 2;
+}
+
+// «По окну» для вырезки — это увеличение: она меньше окна во все стороны,
+// и показать её один к одному значило бы открыть окно ради той же марки,
+// что стояла в строке. Ниже натуральной величины не опускаемся и выше
+// восьмикратной не поднимаемся: дальше растёт не буква, а зерно скана.
+function fit() {
+  const w = (stage.clientWidth - 44) / nw, h = (stage.clientHeight - 44) / nh;
+  setZoom(Math.max(1, Math.min(w, h, 8)));
+  stage.scrollLeft = (stage.scrollWidth - stage.clientWidth) / 2;
+  stage.scrollTop = (stage.scrollHeight - stage.clientHeight) / 2;
+}
+
+document.querySelectorAll('.crop .shot').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const img = btn.querySelector('img');
+    nw = img.naturalWidth || img.offsetWidth || 1;
+    nh = img.naturalHeight || img.offsetHeight || 1;
+    lbimg.src = img.src;
+    lbimg.alt = img.alt;
+    document.getElementById('lbtitle').textContent = img.alt;
+    document.getElementById('lbfull').href = btn.dataset.full;
+    lb.showModal();
+    fit();   // размеры окна известны только после showModal
+    // В страницу вырезка вшита ужатой до 620 px — в скане их две тысячи, и
+    // вшивать столько восемьдесят раз значило бы вчетверо утяжелить журнал
+    // ради картинок, которые почти всегда просто пролистывают. Поэтому
+    // окно, открывшись, подменяет превью файлом из crops/: место и размер
+    // те же, резкость — скана. Журнал, унесённый от своих папок, файла не
+    // найдёт и останется с превью — так же, как ссылка «полный размер».
+    const mine = ++want;
+    const hi = new Image();
+    hi.onload = () => { if (mine === want) lbimg.src = hi.src; };
+    hi.src = btn.dataset.full;
+  });
+});
+
+document.getElementById('lbin').addEventListener('click', () => setZoom(zoom * 1.5));
+document.getElementById('lbout').addEventListener('click', () => setZoom(zoom / 1.5));
+document.getElementById('lbfit').addEventListener('click', fit);
+document.getElementById('lbclose').addEventListener('click', () => lb.close());
+// Щелчок мимо окна закрывает: цель события — сам <dialog> только тогда,
+// когда попали в поле вокруг него.
+lb.addEventListener('click', e => { if (e.target === lb) lb.close(); });
+lb.addEventListener('keydown', e => {
+  const k = e.key;
+  if (k === '+' || k === '=') setZoom(zoom * 1.5);
+  else if (k === '-' || k === '_') setZoom(zoom / 1.5);
+  else if (k === '0') fit();
+  else return;
+  e.preventDefault();
+});
+// Колесо само по себе мотает увеличенную вырезку — это его обычная работа.
+// Увеличивает щипок трекпада, который браузер шлёт как колесо с ctrl.
+stage.addEventListener('wheel', e => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  setZoom(zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+}, {passive: false});
+// Тянуть мышью: полосы прокрутки для картинки — неудобная мелочь. Палец не
+// трогаем: сенсорный экран мотает содержимое сам, и вторая, своя прокрутка
+// поверх его собственной уводила бы вырезку вдвое быстрее пальца.
+let drag = null;
+stage.addEventListener('pointerdown', e => {
+  if (e.button || e.pointerType !== 'mouse') return;
+  drag = {x: e.clientX, y: e.clientY, l: stage.scrollLeft, t: stage.scrollTop};
+  stage.setPointerCapture(e.pointerId);
+  stage.classList.add('grab');
+});
+stage.addEventListener('pointermove', e => {
+  if (!drag) return;
+  stage.scrollLeft = drag.l - (e.clientX - drag.x);
+  stage.scrollTop = drag.t - (e.clientY - drag.y);
+});
+['pointerup', 'pointercancel'].forEach(t => stage.addEventListener(t, () => {
+  drag = null;
+  stage.classList.remove('grab');
+}));
+
 addEventListener('scroll', () => sync(), {passive: true});
-addEventListener('resize', measure);
+addEventListener('resize', () => { measure(); if (lb.open) fit(); });
 // Знак нарисован в самой странице, но кегли считает шрифт: до его загрузки
 // высота шапки не окончательная, и порог оказался бы на десяток пикселей
 // не там.
@@ -1190,8 +1344,12 @@ def render(docs) -> str:
                           f"<span class='badge {mark_cls}'>{who}</span>"
                           f"{named}{many}</div>")
                 shots += "".join(
-                    f"<div class=crop><img alt='{e(r['surname'])}, "
-                    f"стр. {page}' src='{thumb_uri(f)}'>"
+                    f"<div class=crop>"
+                    f"<button class=shot type=button "
+                    f"title='Открыть вырезку крупно' "
+                    f"data-full='{e(str(f.relative_to(ROOT)))}'>"
+                    f"<img alt='{e(r['surname'])}, "
+                    f"стр. {page}' src='{thumb_uri(f)}'></button>"
                     f"<div class=cap>вырезка из скана, "
                     f"<a href='{e(f.relative_to(ROOT))}'>полный размер</a>"
                     f"</div></div>" for f in files)
@@ -1205,7 +1363,32 @@ def render(docs) -> str:
         out.append("</div>")
     out.append("<footer>Пересобирается автоматически при каждом поиске. "
                "Источник — <code>&lt;документ&gt;/searches.jsonl</code>.</footer>")
-    out.append(f"</div><script>{JS}</script></body></html>")
+    out.append("</div>")   # .wrap
+    # Окно для вырезки — одно на всю страницу: пятьдесят копий одной и той
+    # же разметки, по одной на картинку, весили бы столько же, сколько сами
+    # вырезки. Стоит вне .wrap: модальное окно всё равно рисуется поверх
+    # страницы, а внутри колонки его легко принять за часть текста.
+    out.append(
+        "<dialog id=lb class=lb aria-label='Вырезка из скана'>"
+        "<div class=lbbar>"
+        "<span class=lbtitle id=lbtitle></span>"
+        "<button id=lbout type=button aria-label='Уменьшить' "
+        "title='Уменьшить (−)'>−</button>"
+        "<span class=lbzoom id=lbzoom role=status></span>"
+        "<button id=lbin type=button aria-label='Увеличить' "
+        "title='Увеличить (+)'>+</button>"
+        "<button id=lbfit type=button title='Вписать в окно (0)'>по окну</button>"
+        "<a id=lbfull href='#' title='Открыть файл вырезки'>полный размер</a>"
+        # Фокус при открытии — на крестике: окно всё равно закрывают чаще,
+        # чем крутят, а без autofocus браузер ставит его на первую кнопку —
+        # «уменьшить», у которой в этот миг обычно нечего уменьшать.
+        "<button id=lbclose type=button autofocus aria-label='Закрыть' "
+        "title='Закрыть (Esc)'>×</button>"
+        "</div>"
+        "<div class=lbstage id=lbstage><div class=lbpad>"
+        "<img id=lbimg alt=''></div></div>"
+        "</dialog>")
+    out.append(f"<script>{JS}</script></body></html>")
     return "\n".join(out)
 
 

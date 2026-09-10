@@ -220,10 +220,10 @@ a.year:hover { border-color: var(--accent); }
    Отступ сверху — чтобы заголовок дела не прилипал к краю окна. */
 .year-mark { height: 0; scroll-margin-top: 16px; }
 
-/* Видимая метка года у первого дела этого года — отдельно от якоря:
-   якорь лежит снаружи секции, чтобы ссылка из полосы работала и при
-   включённом фильтре, а надпись стоит внутри и вместе с секцией
-   исчезает — иначе год висел бы над пустотой.
+/* Видимая метка года — отдельно от якоря: якорь лежит снаружи секции,
+   чтобы ссылка из полосы работала и при включённом фильтре, а надпись
+   стоит внутри и вместе с секцией исчезает — иначе год висел бы над
+   пустотой.
    Годы в журнале идут подряд, но заголовки дел названы книгами, а не
    годами, и на прокрутке ряд карточек читается как сплошной. Надпись
    размечает его на годы: в узком окне — строкой над делом, на широком
@@ -244,6 +244,10 @@ a.year:hover { border-color: var(--accent); }
   }
   .year-tag::after { display: none; }
 }
+/* Метка есть у каждого дела, а видна у первого в своём году — остальные
+   гасит этот класс. Выше по специфичности правила в @media, так что
+   гасит и на широком экране, где метка уходит в поле слева. */
+.year-tag.off { display: none; }
 .years-note { color: var(--dim); font-size: 12.5px; margin: 0 0 26px;
               max-width: 80ch; }
 
@@ -295,19 +299,28 @@ function apply() {
   const q = box.value.trim().toLowerCase();
   const on = chips.filter(c => c.getAttribute('aria-pressed') === 'true')
                   .map(c => c.dataset.s);
+  const active = q || on.length;
   document.querySelectorAll('tbody tr').forEach(tr => {
     const hide = (q && !tr.dataset.k.includes(q))
               || (on.length && !on.includes(tr.dataset.s));
     tr.classList.toggle('hidden', hide);
   });
+  // Метка года принадлежит всему блоку года, а не первому делу в списке:
+  // если фильтр спрятал именно его, надпись переезжает на первое
+  // уцелевшее дело того же года. Без фильтра всё возвращается на место.
+  // Дело, по которому ещё не искали, строк не имеет вовсе — при снятом
+  // фильтре ему прятаться не за что.
+  let year = null;
   document.querySelectorAll('.doc').forEach(d => {
-    const any = d.querySelectorAll('tbody tr:not(.hidden)').length;
+    const any = !active || d.querySelectorAll('tbody tr:not(.hidden)').length;
     d.style.display = any ? '' : 'none';
+    const tag = d.querySelector('.year-tag');
+    if (tag) tag.classList.toggle('off', !any || d.dataset.year === year);
+    if (any) year = d.dataset.year;
   });
   // Свёрнутая таблица прячет как раз то, что искали, поэтому на время
   // фильтра совпадения раскрываются сами. Что человек открыл руками до
   // фильтра, запоминается и возвращается, когда фильтр снимут.
-  const active = q || on.length;
   document.querySelectorAll('details.searches').forEach(det => {
     if (active) {
       if (det.dataset.was === undefined) det.dataset.was = det.open ? '1' : '';
@@ -850,13 +863,16 @@ def render(docs) -> str:
         if head_noyear:
             starts_noyear = False
             out.append(f"<div class=year-mark id='{NOYEAR_ANCHOR}'></div>")
-        out.append(f"<section class=doc id='{e(ident)}'>")
+        label = str(d["year"]) if d.get("year") else "без года"
+        out.append(f"<section class=doc id='{e(ident)}' data-year='{e(label)}'>")
+        # Метка стоит у каждого дела, но погашена у всех, кроме первого в
+        # своём году: год — свойство всего блока, а фильтр по фамилии
+        # может спрятать как раз первое дело. Тогда JS зажигает метку у
+        # первого уцелевшего, и блок не остаётся без года.
         # Год уже назван в строке под заголовком, так что метка — чистая
         # навигация глазом, и читалке её повторять незачем.
-        if starts_year:
-            out.append(f"<div class=year-tag aria-hidden=true>{seen_year}</div>")
-        elif head_noyear:
-            out.append("<div class=year-tag aria-hidden=true>без года</div>")
+        off = "" if starts_year or head_noyear else " off"
+        out.append(f"<div class='year-tag{off}' aria-hidden=true>{label}</div>")
         out.append(f"<h2>{e(title)}</h2>")
         bits = [f"<code>{e(ident)}</code>"]
         if d.get("year"):

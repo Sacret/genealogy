@@ -517,19 +517,27 @@ def years_suite():
         bad += 1
         print("  [FAIL] одиночный год помечен цифрой")
 
-    # Надпись с годом стоит у первого дела года и внутри секции: под
-    # фильтром секция прячется, и год должен уйти вместе с ней, чтобы не
-    # висеть над пустотой. Якорь для ссылки из полосы — наоборот, снаружи
-    # секции, и потому переживает фильтр.
+    # Надпись с годом стоит внутри секции и вместе с ней прячется под
+    # фильтром, чтобы не висеть над пустотой. Но год — свойство всего
+    # блока, а не первого дела в списке: надпись заготовлена у каждого
+    # дела и погашена классом `off`, и если фильтр спрячет первое дело
+    # года, JS зажжёт её у первого уцелевшего. Якорь для ссылки из
+    # полосы — наоборот, снаружи секции, и потому переживает фильтр.
     html = render({"a": _doc(1873, "absent"), "b": _doc(1874, "absent"),
                    "c": _doc(1874, "found")})
     checks = [
-        ("год назван раз на год", html.count("class=year-tag") == 2),
+        ("надпись заготовлена у каждого дела",
+         html.count("class='year-tag") == 3),
+        ("горит одна на год", html.count("class='year-tag'") == 2),
+        ("лишняя погашена",
+         "<section class=doc id='c' data-year='1874'>\n"
+         "<div class='year-tag off' aria-hidden=true>1874" in html),
         ("надпись внутри секции",
-         "<section class=doc id='b'>\n<div class=year-tag aria-hidden=true>1874"
-         in html),
+         "<section class=doc id='b' data-year='1874'>\n"
+         "<div class='year-tag' aria-hidden=true>1874" in html),
         ("якорь остаётся снаружи",
-         html.index("id='g1874'") < html.index("<section class=doc id='b'>")),
+         html.index("id='g1874'")
+         < html.index("<section class=doc id='b' data-year='1874'>")),
     ]
     for name, ok in checks:
         bad += not ok
@@ -542,10 +550,13 @@ def years_suite():
     checks = [
         ("якорь без года один", html.count("id='no-year'") == 1),
         ("якорь перед первым делом без года",
-         html.index("id='no-year'") < html.index("<section class=doc id='b'>")
-         < html.index("<section class=doc id='c'>")),
-        ("надпись «без года» названа раз",
-         html.count(">без года</div>") == 1),
+         html.index("id='no-year'")
+         < html.index("<section class=doc id='b' data-year='без года'>")
+         < html.index("<section class=doc id='c' data-year='без года'>")),
+        ("надпись «без года» горит раз",
+         html.count("<div class='year-tag' aria-hidden=true>без года") == 1),
+        ("у второго дела без года надпись погашена",
+         html.count("<div class='year-tag off' aria-hidden=true>без года") == 1),
     ]
     for name, ok in checks:
         bad += not ok

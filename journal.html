@@ -68,6 +68,11 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
                             outline-offset: 2px; }
 .badge.chip .n { opacity: .7; margin-left: 6px;
                  font-variant-numeric: tabular-nums; }
+/* Чип, под который при наборе фамилии не осталось ни одной строки.
+   Не убираем и не запираем: нажатый чип, ушедший в ноль, иначе было бы
+   нечем отжать. Правило стоит последним — оно должно перебивать и
+   :hover, и нажатое состояние, а вес у всех трёх одинаковый. */
+.badge.chip.zero { opacity: .35; }
 
 /* Сколько строк осталось после фильтра. Пока фильтр не тронут, строки
    нет вовсе: без фильтра это число уже стоит в счётчиках наверху. */
@@ -133,6 +138,10 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
                     overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
 .bar.stuck .chips::-webkit-scrollbar { display: none; }
 .bar.stuck .chip { flex: none; }
+/* Набрана фамилия — и в строке появляется счётчик остатка, а чипам
+   становится тесно. Гасим хвост про родство: слово «найдена» и число
+   говорят главное, остальное досказывает цвет. */
+.bar.stuck.q .chip .tail { display: none; }
 .bar.stuck .count { margin: 0 0 0 auto; white-space: nowrap; }
 /* Узкое окно: сколько осталось — сказано и в самих чипах, а название
    рядом со знаком не нужно, знак и есть название. */
@@ -339,7 +348,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 <div class=years><a class='year no' href='#g1866' title='2 дела за этот год'>1866<i class=more>2</i></a><a class='year no' href='#g1867' title='2 дела за этот год'>1867<i class=more>2</i></a><a class='year no' href='#g1868'>1868</a><span class='year gap' title='не смотрели'>1869</span><span class='year gap' title='не смотрели'>1870</span><span class='year gap' title='не смотрели'>1871</span><span class='year gap' title='не смотрели'>1872</span><a class='year ok' href='#g1873' title='2 дела за этот год'>1873<i class=more>2</i></a><a class='year ok' href='#g1874' title='2 дела за этот год'>1874<i class=more>2</i></a><span class='year gap' title='не смотрели'>1875</span><a class='year maybe' href='#g1876' title='2 дела за этот год'>1876<i class=more>2</i></a><a class='year no' href='#g1877'>1877</a><span class='year gap' title='не смотрели'>1878</span><span class='year gap' title='не смотрели'>1879</span><a class='year no' href='#g1880'>1880</a><a class='year no' href='#g1881'>1881</a><a class='year ok' href='#g1882'>1882</a><a class='year no' href='#g1883'>1883</a><a class='year maybe' href='#g1884'>1884</a><span class='year gap' title='не смотрели'>1885</span><span class='year gap' title='не смотрели'>1886</span><a class='year maybe' href='#g1887' title='2 дела за этот год'>1887<i class=more>2</i></a><a class='year no' href='#g1888'>1888</a><a class='year ok' href='#g1889' title='2 дела за этот год'>1889<i class=more>2</i></a><span class='year gap' title='не смотрели'>1890</span><a class='year maybe' href='#g1891' title='2 дела за этот год'>1891<i class=more>2</i></a><a class='year maybe' href='#g1892' title='2 дела за этот год'>1892<i class=more>2</i></a><a class='year maybe' href='#g1893' title='2 дела за этот год'>1893<i class=more>2</i></a><a class='year ok' href='#g1894' title='3 дела за этот год'>1894<i class=more>3</i></a><a class='year no' href='#g1895' title='3 дела за этот год'>1895<i class=more>3</i></a><a class='year no' href='#g1896' title='2 дела за этот год'>1896<i class=more>2</i></a><a class='year ok' href='#g1897'>1897</a><a class='year maybe' href='#g1898'>1898</a><a class='year maybe' href='#g1899' title='2 дела за этот год'>1899<i class=more>2</i></a><a class='year ok' href='#g1900' title='2 дела за этот год'>1900<i class=more>2</i></a><a class='year ok' href='#g1901' title='3 дела за этот год'>1901<i class=more>3</i></a><a class='year ok' href='#g1902' title='2 дела за этот год'>1902<i class=more>2</i></a><a class='year ok' href='#g1903' title='2 дела за этот год'>1903<i class=more>2</i></a><a class='year maybe' href='#g1904' title='3 дела за этот год'>1904<i class=more>3</i></a><a class='year maybe' href='#g1905' title='3 дела за этот год'>1905<i class=more>3</i></a><a class='year maybe' href='#g1906' title='3 дела за этот год'>1906<i class=more>3</i></a><a class='year ok' href='#g1907' title='2 дела за этот год'>1907<i class=more>2</i></a><a class='year ok' href='#g1908' title='3 дела за этот год'>1908<i class=more>3</i></a><a class='year ok' href='#g1909' title='3 дела за этот год'>1909<i class=more>3</i></a><a class='year ok' href='#g1910' title='3 дела за этот год'>1910<i class=more>3</i></a><a class='year ok' href='#g1911' title='379 дел за этот год'>1911<i class=more>379</i></a><a class='year ok' href='#g1912' title='88 дел за этот год'>1912<i class=more>88</i></a><a class='year no' href='#g1913'>1913</a><span class='year gap' title='не смотрели'>1914</span><a class='year no' href='#g1915' title='2 дела за этот год'>1915<i class=more>2</i></a><span class='year gap' title='не смотрели'>1916</span><span class='year gap' title='не смотрели'>1917</span><span class='year gap' title='не смотрели'>1918</span><a class='year maybe' href='#g1919' title='3 дела за этот год'>1919<i class=more>3</i></a><a class='year noyear maybe' href='#no-year' title='8 дел без года: том, который в полосу лет не встаёт'>без года<i class=more>8</i></a></div><p class=years-note>1866—1919: просмотрено 542 из 550 дел за 40 лет, 14 лет в промежутке не открывали. Ещё 8 дел без года — они в конце списка. Цифра в клетке — сколько дел за этот год; цвет по лучшему из них. Зелёный — найден человек, чьё родство установлено; синий — фамилия найдена, но это однофамилец или родство не доказано; серый — искали и не нашли, пунктир — дело не смотрели.</p>
 <div class=bartools>
 <input id=filter type=search placeholder='Фильтр по фамилии, документу или странице…' autocomplete=off>
-<div class=chips role=group aria-label='Фильтр по итогу'><button type=button class='badge no chip' data-s='no' aria-pressed=false>не найдена<span class=n>1048</span></button><button type=button class='badge maybe chip' data-s='maybe' aria-pressed=false>найдена, родство не установлено<span class=n>33</span></button><button type=button class='badge ok chip' data-s='ok' aria-pressed=false>найдена, родство подтверждено<span class=n>19</span></button></div>
+<div class=chips role=group aria-label='Фильтр по итогу'><button type=button class='badge no chip' data-s='no' data-n='1048' aria-pressed=false aria-label='не найдена'>не найдена<span class=n>1048</span></button><button type=button class='badge maybe chip' data-s='maybe' data-n='33' aria-pressed=false aria-label='найдена, родство не установлено'>найдена<span class=tail>, родство не установлено</span><span class=n>33</span></button><button type=button class='badge ok chip' data-s='ok' data-n='19' aria-pressed=false aria-label='найдена, родство подтверждено'>найдена<span class=tail>, родство подтверждено</span><span class=n>19</span></button></div>
 <p id=count class=count role=status aria-live=polite></p>
 </div>
 </header>
@@ -16284,6 +16293,8 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 const box = document.getElementById('filter');
 const chips = Array.from(document.querySelectorAll('.chip'));
 const count = document.getElementById('count');
+const bar = document.getElementById('bar');
+const space = document.getElementById('barspace');
 
 function plural(n, one, few, many) {
   if (n % 100 >= 11 && n % 100 <= 14) return many;
@@ -16301,12 +16312,28 @@ function apply() {
                   .map(c => c.dataset.s);
   const active = q || on.length;
   let shown = 0;
+  // Строки считаются и по одному полю тоже: число на чипе должно говорить,
+  // сколько строк он оставит из набранных сейчас, а не сколько их в
+  // журнале вообще. Поэтому подсчёт идёт до чипов и мимо них — иначе
+  // первое же нажатие обнулило бы соседние чипы и отжать их было бы не по
+  // чему.
+  const tally = {};
   document.querySelectorAll('tbody tr').forEach(tr => {
-    const hide = (q && !tr.dataset.k.includes(q))
-              || (on.length && !on.includes(tr.dataset.s));
+    const hit = !q || tr.dataset.k.includes(q);
+    if (hit) tally[tr.dataset.s] = (tally[tr.dataset.s] || 0) + 1;
+    const hide = !hit || (on.length && !on.includes(tr.dataset.s));
     tr.classList.toggle('hidden', hide);
     if (!hide) shown++;
   });
+  chips.forEach(c => {
+    const n = q ? tally[c.dataset.s] || 0 : +c.dataset.n;
+    c.querySelector('.n').textContent = n;
+    c.classList.toggle('zero', !n);
+  });
+  // Набранная фамилия укорачивает чипы в севшей шапке: там строка одна на
+  // всё — поле, чипы и счётчик остатка, — и хвост про родство в неё уже
+  // не входит. Развёрнутой шапке тесно не бывает, подпись в ней целая.
+  bar.classList.toggle('q', !!q);
   // Метка года принадлежит всему блоку года, а не первому делу в списке:
   // если фильтр спрятал именно его, надпись переезжает на первое
   // уцелевшее дело того же года. Без фильтра всё возвращается на место.
@@ -16379,8 +16406,6 @@ openTarget();
 // низ, и подмена не видна — ни скачка, ни всплытия пустой полосы. Место
 // уехавшей шапки держит распорка: без неё страница подпрыгнула бы на всю
 // её высоту, потому что севшая шапка выпадает из потока.
-const bar = document.getElementById('bar');
-const space = document.getElementById('barspace');
 let top0 = 0, full = 0, compact = 0;
 
 function measure() {

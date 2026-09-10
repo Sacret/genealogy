@@ -107,6 +107,11 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
                             outline-offset: 2px; }
 .badge.chip .n { opacity: .7; margin-left: 6px;
                  font-variant-numeric: tabular-nums; }
+/* Чип, под который при наборе фамилии не осталось ни одной строки.
+   Не убираем и не запираем: нажатый чип, ушедший в ноль, иначе было бы
+   нечем отжать. Правило стоит последним — оно должно перебивать и
+   :hover, и нажатое состояние, а вес у всех трёх одинаковый. */
+.badge.chip.zero { opacity: .35; }
 
 /* Сколько строк осталось после фильтра. Пока фильтр не тронут, строки
    нет вовсе: без фильтра это число уже стоит в счётчиках наверху. */
@@ -172,6 +177,10 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
                     overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
 .bar.stuck .chips::-webkit-scrollbar { display: none; }
 .bar.stuck .chip { flex: none; }
+/* Набрана фамилия — и в строке появляется счётчик остатка, а чипам
+   становится тесно. Гасим хвост про родство: слово «найдена» и число
+   говорят главное, остальное досказывает цвет. */
+.bar.stuck.q .chip .tail { display: none; }
 .bar.stuck .count { margin: 0 0 0 auto; white-space: nowrap; }
 /* Узкое окно: сколько осталось — сказано и в самих чипах, а название
    рядом со знаком не нужно, знак и есть название. */
@@ -366,6 +375,8 @@ JS = """
 const box = document.getElementById('filter');
 const chips = Array.from(document.querySelectorAll('.chip'));
 const count = document.getElementById('count');
+const bar = document.getElementById('bar');
+const space = document.getElementById('barspace');
 
 function plural(n, one, few, many) {
   if (n % 100 >= 11 && n % 100 <= 14) return many;
@@ -383,12 +394,28 @@ function apply() {
                   .map(c => c.dataset.s);
   const active = q || on.length;
   let shown = 0;
+  // Строки считаются и по одному полю тоже: число на чипе должно говорить,
+  // сколько строк он оставит из набранных сейчас, а не сколько их в
+  // журнале вообще. Поэтому подсчёт идёт до чипов и мимо них — иначе
+  // первое же нажатие обнулило бы соседние чипы и отжать их было бы не по
+  // чему.
+  const tally = {};
   document.querySelectorAll('tbody tr').forEach(tr => {
-    const hide = (q && !tr.dataset.k.includes(q))
-              || (on.length && !on.includes(tr.dataset.s));
+    const hit = !q || tr.dataset.k.includes(q);
+    if (hit) tally[tr.dataset.s] = (tally[tr.dataset.s] || 0) + 1;
+    const hide = !hit || (on.length && !on.includes(tr.dataset.s));
     tr.classList.toggle('hidden', hide);
     if (!hide) shown++;
   });
+  chips.forEach(c => {
+    const n = q ? tally[c.dataset.s] || 0 : +c.dataset.n;
+    c.querySelector('.n').textContent = n;
+    c.classList.toggle('zero', !n);
+  });
+  // Набранная фамилия укорачивает чипы в севшей шапке: там строка одна на
+  // всё — поле, чипы и счётчик остатка, — и хвост про родство в неё уже
+  // не входит. Развёрнутой шапке тесно не бывает, подпись в ней целая.
+  bar.classList.toggle('q', !!q);
   // Метка года принадлежит всему блоку года, а не первому делу в списке:
   // если фильтр спрятал именно его, надпись переезжает на первое
   // уцелевшее дело того же года. Без фильтра всё возвращается на место.
@@ -461,8 +488,6 @@ openTarget();
 // низ, и подмена не видна — ни скачка, ни всплытия пустой полосы. Место
 // уехавшей шапки держит распорка: без неё страница подпрыгнула бы на всю
 // её высоту, потому что севшая шапка выпадает из потока.
-const bar = document.getElementById('bar');
-const space = document.getElementById('barspace');
 let top0 = 0, full = 0, compact = 0;
 
 function measure() {
@@ -937,12 +962,18 @@ def status_chips(searches) -> str:
         if cls not in seen:
             continue
         label, n = seen[cls]
-        # Класс цвета обязателен рядом с `chip`: он и красит пузырь.
-        # Без него `data-s` остаётся только для фильтра, а все три
-        # кнопки выходят одинаково серыми.
+        # Хвост про родство отделён от слова «найдена»: в севшей шапке,
+        # когда набрана фамилия, места на него нет, и CSS его гасит —
+        # остаются «найдена» и число, а синее от зелёного отличает цвет,
+        # как и везде в журнале. Полная подпись при этом никуда не
+        # девается: она в aria-label, иначе для читалки обе кнопки
+        # назывались бы одинаково, а цвет ей не слышен.
+        head, _, tail = label.partition(", ")
         out.append(f"<button type=button class='badge {cls} chip' "
-                   f"data-s='{cls}' aria-pressed=false>{e(label)}"
-                   f"<span class=n>{n}</span></button>")
+                   f"data-s='{cls}' data-n='{n}' aria-pressed=false "
+                   f"aria-label='{e(label)}'>{e(head)}"
+                   + (f"<span class=tail>, {e(tail)}</span>" if tail else "")
+                   + f"<span class=n>{n}</span></button>")
     out.append("</div>")
     return "".join(out)
 

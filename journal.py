@@ -49,6 +49,7 @@ CSS = """
   --maybe-bg: #e0eaf3; --maybe-ink: #2c5578;
   --no-bg: #ece9e5; --no-ink: #6b6560;
   --wait-bg: #f7ecd8; --wait-ink: #8a5f18;
+  --bar: rgba(250, 248, 245, .86);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -58,6 +59,7 @@ CSS = """
     --maybe-bg: #1b2b39; --maybe-ink: #8fbede;
     --no-bg: #2a2622; --no-ink: #9a918a;
     --wait-bg: #3a2e18; --wait-ink: #e0b463;
+    --bar: rgba(23, 21, 19, .88);
   }
 }
 * { box-sizing: border-box; }
@@ -84,7 +86,7 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
              letter-spacing: .06em; }
 
 #filter {
-  width: 100%; padding: 11px 14px; margin-bottom: 26px; font: inherit;
+  width: 100%; padding: 11px 14px; margin-bottom: 10px; font: inherit;
   background: var(--card); color: var(--ink);
   border: 1px solid var(--line); border-radius: 9px;
 }
@@ -94,7 +96,7 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
    синий, зелёный, — чтобы связь «нажал этот цвет — остались такие
    строки» читалась без подписи. Невыбранный чип приглушён, но не
    обесцвечен: цвет и есть его смысл. */
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -16px 0 26px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
 .badge.chip {
   font-family: inherit; font-size: 12.5px; line-height: 1.4; cursor: pointer;
   padding: 5px 13px; border: 1px solid transparent; opacity: .75;
@@ -109,10 +111,72 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 /* Сколько строк осталось после фильтра. Пока фильтр не тронут, строки
    нет вовсе: без фильтра это число уже стоит в счётчиках наверху. */
 .count { display: none; color: var(--dim); font-size: 13px;
-         margin: -14px 0 24px; }
+         margin: 12px 0 0; }
 .count.on { display: block; }
 .count b { color: var(--ink); font-weight: 600;
            font-variant-numeric: tabular-nums; }
+
+/* Шапка. Отступ снизу — полем, а не полями детей: иначе нижний margin
+   чипов схлопывался бы наружу и не попадал в offsetHeight, по которому
+   распорка держит место уехавшей шапки. */
+.bar { padding-bottom: 26px; }
+.barspace { height: 0; }
+
+/* Прокрученная шапка: садится сверху и сжимается в две строки — знак с
+   названием и счётчики, под ними поиск с фильтром. Полоса лет, подзаголовок
+   и подпись под полосой уходят: это чтение, а не управление, и на них
+   возвращаются наверх. Поле поиска и чипы здесь те же самые, не копия, —
+   второе поле пришлось бы синхронизировать с первым, а вместе с ним и
+   фокус, и каретку. */
+.bar.stuck {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  margin: 0; padding: 9px 24px 10px;
+  background: var(--bar); border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+/* Шапка растянута по окну, содержимое — по колонке, как всё остальное. */
+.bar.stuck > .barmain, .bar.stuck > .bartools {
+  max-width: 1000px; margin: 0 auto;
+}
+.bar.stuck .sub, .bar.stuck .years, .bar.stuck .years-note { display: none; }
+
+.bar.stuck .barmain { display: flex; align-items: center; gap: 14px;
+                      min-width: 0; }
+.bar.stuck h1 { font-size: 15px; margin: 0; gap: 8px; white-space: nowrap;
+                flex: none; }
+.bar.stuck h1 .mark { width: 20px; height: 20px; }
+/* Шесть счётчиков в строку на телефон не встают. Полоса прокручивается
+   вбок — сама, без полосы прокрутки: обрезать нечего, все шесть нужны. */
+.bar.stuck .stats {
+  flex: 1; min-width: 0; margin: 0; gap: 6px; flex-wrap: nowrap;
+  overflow-x: auto; scrollbar-width: none;
+}
+.bar.stuck .stats::-webkit-scrollbar { display: none; }
+.bar.stuck .stat {
+  display: flex; align-items: baseline; gap: 5px; flex: none;
+  min-width: 0; padding: 0; border: none; background: none;
+}
+.bar.stuck .stat b { display: inline; font-size: 14px; }
+.bar.stuck .stat span { font-size: 12px; text-transform: none;
+                        letter-spacing: 0; }
+.bar.stuck .stat + .stat::before { content: '·'; color: var(--dim);
+                                   opacity: .55; margin-right: 6px; }
+
+.bar.stuck .bartools { display: flex; align-items: center; gap: 10px;
+                       margin-top: 8px; }
+/* Поле не ужимается ниже читаемого: на телефоне чипам есть куда деться —
+   они прокручиваются вбок, — а полю ввода некуда. */
+.bar.stuck #filter { flex: 1 1 180px; min-width: 150px; max-width: 360px;
+                     margin: 0; padding: 7px 12px; font-size: 14px; }
+.bar.stuck .chips { flex: 0 1 auto; margin: 0; flex-wrap: nowrap;
+                    overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.bar.stuck .chips::-webkit-scrollbar { display: none; }
+.bar.stuck .chip { flex: none; }
+.bar.stuck .count { margin: 0 0 0 auto; white-space: nowrap; }
+/* Узкое окно: сколько осталось — сказано и в самих чипах, а название
+   рядом со знаком не нужно, знак и есть название. */
+@media (max-width: 760px) { .bar.stuck .count { display: none; } }
+@media (max-width: 520px) { .bar.stuck h1 .name { display: none; } }
 
 .doc { position: relative; margin-bottom: 34px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
@@ -225,8 +289,11 @@ a.year:hover { border-color: var(--accent); }
 .year .more { font-style: normal; font-size: 10px; opacity: .75;
               margin-left: 3px; align-self: flex-start; line-height: 1; }
 /* Пустая метка года перед первым делом этого года: цель ссылки из полосы.
-   Отступ сверху — чтобы заголовок дела не прилипал к краю окна. */
-.year-mark { height: 0; scroll-margin-top: 16px; }
+   Отступ сверху — чтобы заголовок дела не прилипал к краю окна, а на
+   прокрученной странице ещё и не ушёл под севшую шапку: её высоту JS
+   кладёт в --stuck-h. То же и для ссылок между делами, ведущих на секцию. */
+.year-mark, .doc { scroll-margin-top: calc(var(--stuck-h, 0px) + 16px); }
+.year-mark { height: 0; }
 
 /* Видимая метка года — отдельно от якоря: якорь лежит снаружи секции,
    чтобы ссылка из полосы работала и при включённом фильтре, а надпись
@@ -388,6 +455,46 @@ function openTarget() {
 }
 addEventListener('hashchange', openTarget);
 openTarget();
+
+// Шапка садится сверху ровно в тот миг, когда её развёрнутый низ доходит
+// до края окна: сжатая шапка встаёт на то же место, которое занимал этот
+// низ, и подмена не видна — ни скачка, ни всплытия пустой полосы. Место
+// уехавшей шапки держит распорка: без неё страница подпрыгнула бы на всю
+// её высоту, потому что севшая шапка выпадает из потока.
+const bar = document.getElementById('bar');
+const space = document.getElementById('barspace');
+let top0 = 0, full = 0, compact = 0;
+
+function measure() {
+  bar.classList.remove('stuck');
+  space.style.height = '0px';
+  full = bar.offsetHeight;
+  top0 = bar.getBoundingClientRect().top + scrollY;
+  // Сжатую высоту меряем ею же самой: она зависит от ширины окна — на
+  // телефоне чипы переносятся, счётчики прокручиваются, — и посчитать её
+  // заранее нельзя. Между двумя замерами браузер не рисует, так что
+  // мигания нет.
+  bar.classList.add('stuck');
+  compact = bar.offsetHeight;
+  bar.classList.remove('stuck');
+  document.documentElement.style.setProperty('--stuck-h', compact + 'px');
+  sync(true);
+}
+
+function sync(force) {
+  const on = scrollY > top0 + full - compact;
+  if (!force && on === bar.classList.contains('stuck')) return;
+  bar.classList.toggle('stuck', on);
+  space.style.height = on ? full + 'px' : '0px';
+}
+
+addEventListener('scroll', () => sync(), {passive: true});
+addEventListener('resize', measure);
+// Знак нарисован в самой странице, но кегли считает шрифт: до его загрузки
+// высота шапки не окончательная, и порог оказался бы на десяток пикселей
+// не там.
+addEventListener('load', measure);
+measure();
 """
 
 
@@ -854,8 +961,15 @@ def render(docs) -> str:
            f"<link rel='icon' href='{_favicon()}'>",
            f"<style>{CSS}</style></head><body>",
            "<div class=wrap>",
+           # Шапка едет со страницей, а прокрученная садится сверху,
+           # сжавшись в две строки: знак с названием и счётчики, под ними
+           # поиск с фильтром. Поле поиска при этом одно на всю страницу —
+           # отдельная строка-двойник требовала бы держать в согласии и
+           # текст, и фокус, и каретку.
+           "<header class=bar id=bar>",
+           "<div class=barmain>",
            "<h1>" + (f"<img class=mark alt='' src='{mark}'>" if mark else "")
-           + "Журнал поисков</h1>",
+           + "<span class=name>Журнал поисков</span></h1>",
            "<p class=sub>Дореволюционные документы: какие фамилии по каким "
            "делам уже проверены.</p>",
            "<div class=stats>",
@@ -866,11 +980,18 @@ def render(docs) -> str:
            f"<div class=stat><b>{absent}</b><span>не найдено</span></div>",
            f"<div class=stat><b>{todo}</b><span>не проверено</span></div>",
            "</div>",
+           "</div>",
            year_strip(docs),
+           "<div class=bartools>",
            "<input id=filter type=search placeholder='Фильтр по фамилии, "
            "документу или странице…' autocomplete=off>",
            status_chips(searches),
-           "<p id=count class=count role=status aria-live=polite></p>"]
+           "<p id=count class=count role=status aria-live=polite></p>",
+           "</div>",
+           "</header>",
+           # Место, которое шапка занимала в потоке: пока она сидит сверху,
+           # распорка держит её прежнюю высоту, и страница не дёргается.
+           "<div class=barspace id=barspace></div>"]
 
     # Якорь года ставится перед первым делом этого года. Дела уже
     # отсортированы по годам, так что «первое» — это просто смена года.

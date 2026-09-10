@@ -10,6 +10,7 @@
   --maybe-bg: #e0eaf3; --maybe-ink: #2c5578;
   --no-bg: #ece9e5; --no-ink: #6b6560;
   --wait-bg: #f7ecd8; --wait-ink: #8a5f18;
+  --bar: rgba(250, 248, 245, .86);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -19,6 +20,7 @@
     --maybe-bg: #1b2b39; --maybe-ink: #8fbede;
     --no-bg: #2a2622; --no-ink: #9a918a;
     --wait-bg: #3a2e18; --wait-ink: #e0b463;
+    --bar: rgba(23, 21, 19, .88);
   }
 }
 * { box-sizing: border-box; }
@@ -45,7 +47,7 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
              letter-spacing: .06em; }
 
 #filter {
-  width: 100%; padding: 11px 14px; margin-bottom: 26px; font: inherit;
+  width: 100%; padding: 11px 14px; margin-bottom: 10px; font: inherit;
   background: var(--card); color: var(--ink);
   border: 1px solid var(--line); border-radius: 9px;
 }
@@ -55,7 +57,7 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
    синий, зелёный, — чтобы связь «нажал этот цвет — остались такие
    строки» читалась без подписи. Невыбранный чип приглушён, но не
    обесцвечен: цвет и есть его смысл. */
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -16px 0 26px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
 .badge.chip {
   font-family: inherit; font-size: 12.5px; line-height: 1.4; cursor: pointer;
   padding: 5px 13px; border: 1px solid transparent; opacity: .75;
@@ -70,10 +72,72 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 /* Сколько строк осталось после фильтра. Пока фильтр не тронут, строки
    нет вовсе: без фильтра это число уже стоит в счётчиках наверху. */
 .count { display: none; color: var(--dim); font-size: 13px;
-         margin: -14px 0 24px; }
+         margin: 12px 0 0; }
 .count.on { display: block; }
 .count b { color: var(--ink); font-weight: 600;
            font-variant-numeric: tabular-nums; }
+
+/* Шапка. Отступ снизу — полем, а не полями детей: иначе нижний margin
+   чипов схлопывался бы наружу и не попадал в offsetHeight, по которому
+   распорка держит место уехавшей шапки. */
+.bar { padding-bottom: 26px; }
+.barspace { height: 0; }
+
+/* Прокрученная шапка: садится сверху и сжимается в две строки — знак с
+   названием и счётчики, под ними поиск с фильтром. Полоса лет, подзаголовок
+   и подпись под полосой уходят: это чтение, а не управление, и на них
+   возвращаются наверх. Поле поиска и чипы здесь те же самые, не копия, —
+   второе поле пришлось бы синхронизировать с первым, а вместе с ним и
+   фокус, и каретку. */
+.bar.stuck {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  margin: 0; padding: 9px 24px 10px;
+  background: var(--bar); border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+/* Шапка растянута по окну, содержимое — по колонке, как всё остальное. */
+.bar.stuck > .barmain, .bar.stuck > .bartools {
+  max-width: 1000px; margin: 0 auto;
+}
+.bar.stuck .sub, .bar.stuck .years, .bar.stuck .years-note { display: none; }
+
+.bar.stuck .barmain { display: flex; align-items: center; gap: 14px;
+                      min-width: 0; }
+.bar.stuck h1 { font-size: 15px; margin: 0; gap: 8px; white-space: nowrap;
+                flex: none; }
+.bar.stuck h1 .mark { width: 20px; height: 20px; }
+/* Шесть счётчиков в строку на телефон не встают. Полоса прокручивается
+   вбок — сама, без полосы прокрутки: обрезать нечего, все шесть нужны. */
+.bar.stuck .stats {
+  flex: 1; min-width: 0; margin: 0; gap: 6px; flex-wrap: nowrap;
+  overflow-x: auto; scrollbar-width: none;
+}
+.bar.stuck .stats::-webkit-scrollbar { display: none; }
+.bar.stuck .stat {
+  display: flex; align-items: baseline; gap: 5px; flex: none;
+  min-width: 0; padding: 0; border: none; background: none;
+}
+.bar.stuck .stat b { display: inline; font-size: 14px; }
+.bar.stuck .stat span { font-size: 12px; text-transform: none;
+                        letter-spacing: 0; }
+.bar.stuck .stat + .stat::before { content: '·'; color: var(--dim);
+                                   opacity: .55; margin-right: 6px; }
+
+.bar.stuck .bartools { display: flex; align-items: center; gap: 10px;
+                       margin-top: 8px; }
+/* Поле не ужимается ниже читаемого: на телефоне чипам есть куда деться —
+   они прокручиваются вбок, — а полю ввода некуда. */
+.bar.stuck #filter { flex: 1 1 180px; min-width: 150px; max-width: 360px;
+                     margin: 0; padding: 7px 12px; font-size: 14px; }
+.bar.stuck .chips { flex: 0 1 auto; margin: 0; flex-wrap: nowrap;
+                    overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.bar.stuck .chips::-webkit-scrollbar { display: none; }
+.bar.stuck .chip { flex: none; }
+.bar.stuck .count { margin: 0 0 0 auto; white-space: nowrap; }
+/* Узкое окно: сколько осталось — сказано и в самих чипах, а название
+   рядом со знаком не нужно, знак и есть название. */
+@media (max-width: 760px) { .bar.stuck .count { display: none; } }
+@media (max-width: 520px) { .bar.stuck h1 .name { display: none; } }
 
 .doc { position: relative; margin-bottom: 34px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
@@ -186,8 +250,11 @@ a.year:hover { border-color: var(--accent); }
 .year .more { font-style: normal; font-size: 10px; opacity: .75;
               margin-left: 3px; align-self: flex-start; line-height: 1; }
 /* Пустая метка года перед первым делом этого года: цель ссылки из полосы.
-   Отступ сверху — чтобы заголовок дела не прилипал к краю окна. */
-.year-mark { height: 0; scroll-margin-top: 16px; }
+   Отступ сверху — чтобы заголовок дела не прилипал к краю окна, а на
+   прокрученной странице ещё и не ушёл под севшую шапку: её высоту JS
+   кладёт в --stuck-h. То же и для ссылок между делами, ведущих на секцию. */
+.year-mark, .doc { scroll-margin-top: calc(var(--stuck-h, 0px) + 16px); }
+.year-mark { height: 0; }
 
 /* Видимая метка года — отдельно от якоря: якорь лежит снаружи секции,
    чтобы ссылка из полосы работала и при включённом фильтре, а надпись
@@ -256,7 +323,9 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
          border-top: 1px solid var(--line); padding-top: 14px; }
 </style></head><body>
 <div class=wrap>
-<h1><img class=mark alt='' src='data:image/png;base64,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'>Журнал поисков</h1>
+<header class=bar id=bar>
+<div class=barmain>
+<h1><img class=mark alt='' src='data:image/png;base64,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'><span class=name>Журнал поисков</span></h1>
 <p class=sub>Дореволюционные документы: какие фамилии по каким делам уже проверены.</p>
 <div class=stats>
 <div class=stat><b>550</b><span>документов</span></div>
@@ -266,10 +335,15 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 <div class=stat><b>1048</b><span>не найдено</span></div>
 <div class=stat><b>0</b><span>не проверено</span></div>
 </div>
+</div>
 <div class=years><a class='year no' href='#g1866' title='2 дела за этот год'>1866<i class=more>2</i></a><a class='year no' href='#g1867' title='2 дела за этот год'>1867<i class=more>2</i></a><a class='year no' href='#g1868'>1868</a><span class='year gap' title='не смотрели'>1869</span><span class='year gap' title='не смотрели'>1870</span><span class='year gap' title='не смотрели'>1871</span><span class='year gap' title='не смотрели'>1872</span><a class='year ok' href='#g1873' title='2 дела за этот год'>1873<i class=more>2</i></a><a class='year ok' href='#g1874' title='2 дела за этот год'>1874<i class=more>2</i></a><span class='year gap' title='не смотрели'>1875</span><a class='year maybe' href='#g1876' title='2 дела за этот год'>1876<i class=more>2</i></a><a class='year no' href='#g1877'>1877</a><span class='year gap' title='не смотрели'>1878</span><span class='year gap' title='не смотрели'>1879</span><a class='year no' href='#g1880'>1880</a><a class='year no' href='#g1881'>1881</a><a class='year ok' href='#g1882'>1882</a><a class='year no' href='#g1883'>1883</a><a class='year maybe' href='#g1884'>1884</a><span class='year gap' title='не смотрели'>1885</span><span class='year gap' title='не смотрели'>1886</span><a class='year maybe' href='#g1887' title='2 дела за этот год'>1887<i class=more>2</i></a><a class='year no' href='#g1888'>1888</a><a class='year ok' href='#g1889' title='2 дела за этот год'>1889<i class=more>2</i></a><span class='year gap' title='не смотрели'>1890</span><a class='year maybe' href='#g1891' title='2 дела за этот год'>1891<i class=more>2</i></a><a class='year maybe' href='#g1892' title='2 дела за этот год'>1892<i class=more>2</i></a><a class='year maybe' href='#g1893' title='2 дела за этот год'>1893<i class=more>2</i></a><a class='year ok' href='#g1894' title='3 дела за этот год'>1894<i class=more>3</i></a><a class='year no' href='#g1895' title='3 дела за этот год'>1895<i class=more>3</i></a><a class='year no' href='#g1896' title='2 дела за этот год'>1896<i class=more>2</i></a><a class='year ok' href='#g1897'>1897</a><a class='year maybe' href='#g1898'>1898</a><a class='year maybe' href='#g1899' title='2 дела за этот год'>1899<i class=more>2</i></a><a class='year ok' href='#g1900' title='2 дела за этот год'>1900<i class=more>2</i></a><a class='year ok' href='#g1901' title='3 дела за этот год'>1901<i class=more>3</i></a><a class='year ok' href='#g1902' title='2 дела за этот год'>1902<i class=more>2</i></a><a class='year ok' href='#g1903' title='2 дела за этот год'>1903<i class=more>2</i></a><a class='year maybe' href='#g1904' title='3 дела за этот год'>1904<i class=more>3</i></a><a class='year maybe' href='#g1905' title='3 дела за этот год'>1905<i class=more>3</i></a><a class='year maybe' href='#g1906' title='3 дела за этот год'>1906<i class=more>3</i></a><a class='year ok' href='#g1907' title='2 дела за этот год'>1907<i class=more>2</i></a><a class='year ok' href='#g1908' title='3 дела за этот год'>1908<i class=more>3</i></a><a class='year ok' href='#g1909' title='3 дела за этот год'>1909<i class=more>3</i></a><a class='year ok' href='#g1910' title='3 дела за этот год'>1910<i class=more>3</i></a><a class='year ok' href='#g1911' title='379 дел за этот год'>1911<i class=more>379</i></a><a class='year ok' href='#g1912' title='88 дел за этот год'>1912<i class=more>88</i></a><a class='year no' href='#g1913'>1913</a><span class='year gap' title='не смотрели'>1914</span><a class='year no' href='#g1915' title='2 дела за этот год'>1915<i class=more>2</i></a><span class='year gap' title='не смотрели'>1916</span><span class='year gap' title='не смотрели'>1917</span><span class='year gap' title='не смотрели'>1918</span><a class='year maybe' href='#g1919' title='3 дела за этот год'>1919<i class=more>3</i></a><a class='year noyear maybe' href='#no-year' title='8 дел без года: том, который в полосу лет не встаёт'>без года<i class=more>8</i></a></div><p class=years-note>1866—1919: просмотрено 542 из 550 дел за 40 лет, 14 лет в промежутке не открывали. Ещё 8 дел без года — они в конце списка. Цифра в клетке — сколько дел за этот год; цвет по лучшему из них. Зелёный — найден человек, чьё родство установлено; синий — фамилия найдена, но это однофамилец или родство не доказано; серый — искали и не нашли, пунктир — дело не смотрели.</p>
+<div class=bartools>
 <input id=filter type=search placeholder='Фильтр по фамилии, документу или странице…' autocomplete=off>
 <div class=chips role=group aria-label='Фильтр по итогу'><button type=button class='badge no chip' data-s='no' aria-pressed=false>не найдена<span class=n>1048</span></button><button type=button class='badge maybe chip' data-s='maybe' aria-pressed=false>найдена, родство не установлено<span class=n>33</span></button><button type=button class='badge ok chip' data-s='ok' aria-pressed=false>найдена, родство подтверждено<span class=n>19</span></button></div>
 <p id=count class=count role=status aria-live=polite></p>
+</div>
+</header>
+<div class=barspace id=barspace></div>
 <div class=year-mark id='g1866'></div>
 <section class=doc id='bv0000027' data-year='1866'>
 <div class='year-tag' aria-hidden=true>1866</div>
@@ -16299,4 +16373,44 @@ function openTarget() {
 }
 addEventListener('hashchange', openTarget);
 openTarget();
+
+// Шапка садится сверху ровно в тот миг, когда её развёрнутый низ доходит
+// до края окна: сжатая шапка встаёт на то же место, которое занимал этот
+// низ, и подмена не видна — ни скачка, ни всплытия пустой полосы. Место
+// уехавшей шапки держит распорка: без неё страница подпрыгнула бы на всю
+// её высоту, потому что севшая шапка выпадает из потока.
+const bar = document.getElementById('bar');
+const space = document.getElementById('barspace');
+let top0 = 0, full = 0, compact = 0;
+
+function measure() {
+  bar.classList.remove('stuck');
+  space.style.height = '0px';
+  full = bar.offsetHeight;
+  top0 = bar.getBoundingClientRect().top + scrollY;
+  // Сжатую высоту меряем ею же самой: она зависит от ширины окна — на
+  // телефоне чипы переносятся, счётчики прокручиваются, — и посчитать её
+  // заранее нельзя. Между двумя замерами браузер не рисует, так что
+  // мигания нет.
+  bar.classList.add('stuck');
+  compact = bar.offsetHeight;
+  bar.classList.remove('stuck');
+  document.documentElement.style.setProperty('--stuck-h', compact + 'px');
+  sync(true);
+}
+
+function sync(force) {
+  const on = scrollY > top0 + full - compact;
+  if (!force && on === bar.classList.contains('stuck')) return;
+  bar.classList.toggle('stuck', on);
+  space.style.height = on ? full + 'px' : '0px';
+}
+
+addEventListener('scroll', () => sync(), {passive: true});
+addEventListener('resize', measure);
+// Знак нарисован в самой странице, но кегли считает шрифт: до его загрузки
+// высота шапки не окончательная, и порог оказался бы на десяток пикселей
+// не там.
+addEventListener('load', measure);
+measure();
 </script></body></html>

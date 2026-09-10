@@ -85,6 +85,15 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 .stat span { color: var(--dim); font-size: 12px; text-transform: uppercase;
              letter-spacing: .06em; }
 
+/* Телефон: шесть счётчиков ложатся сеткой по два в ряд. Строкой они
+   разбиваются по длине подписи — «поисков» и «не проверено» выходят
+   разной ширины, и ряды не совпадают краями. В сетке колонки равны,
+   а число под ними всё равно читается слева. */
+@media (max-width: 700px) {
+  .stats { display: grid; grid-template-columns: 1fr 1fr; }
+  .stat { min-width: 0; }
+}
+
 #filter {
   width: 100%; padding: 11px 14px; margin-bottom: 10px; font: inherit;
   background: var(--card); color: var(--ink);
@@ -168,7 +177,7 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 /* Шесть счётчиков в строку на телефон не встают. Полоса прокручивается
    вбок — сама, без полосы прокрутки: обрезать нечего, все шесть нужны. */
 .bar.stuck .stats {
-  flex: 1; min-width: 0; margin: 0; gap: 6px; flex-wrap: nowrap;
+  display: flex; flex: 1; min-width: 0; margin: 0; gap: 6px; flex-wrap: nowrap;
   overflow-x: auto; scrollbar-width: none;
 }
 .bar.stuck .stats::-webkit-scrollbar { display: none; }

@@ -106,6 +106,14 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 .badge.chip .n { opacity: .7; margin-left: 6px;
                  font-variant-numeric: tabular-nums; }
 
+/* Сколько строк осталось после фильтра. Пока фильтр не тронут, строки
+   нет вовсе: без фильтра это число уже стоит в счётчиках наверху. */
+.count { display: none; color: var(--dim); font-size: 13px;
+         margin: -14px 0 24px; }
+.count.on { display: block; }
+.count b { color: var(--ink); font-weight: 600;
+           font-variant-numeric: tabular-nums; }
+
 .doc { position: relative; margin-bottom: 34px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
 .doc .meta { color: var(--dim); font-size: 13px; margin-bottom: 8px; }
@@ -290,6 +298,13 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 JS = """
 const box = document.getElementById('filter');
 const chips = Array.from(document.querySelectorAll('.chip'));
+const count = document.getElementById('count');
+
+function plural(n, one, few, many) {
+  if (n % 100 >= 11 && n % 100 <= 14) return many;
+  const d = n % 10;
+  return d === 1 ? one : d >= 2 && d <= 4 ? few : many;
+}
 
 // Оба фильтра — поле и чипы итога — сходятся здесь. Раздельные
 // обработчики второй раз показывали бы строки, спрятанные первым.
@@ -300,24 +315,37 @@ function apply() {
   const on = chips.filter(c => c.getAttribute('aria-pressed') === 'true')
                   .map(c => c.dataset.s);
   const active = q || on.length;
+  let shown = 0;
   document.querySelectorAll('tbody tr').forEach(tr => {
     const hide = (q && !tr.dataset.k.includes(q))
               || (on.length && !on.includes(tr.dataset.s));
     tr.classList.toggle('hidden', hide);
+    if (!hide) shown++;
   });
   // Метка года принадлежит всему блоку года, а не первому делу в списке:
   // если фильтр спрятал именно его, надпись переезжает на первое
   // уцелевшее дело того же года. Без фильтра всё возвращается на место.
   // Дело, по которому ещё не искали, строк не имеет вовсе — при снятом
   // фильтре ему прятаться не за что.
-  let year = null;
+  let year = null, docs = 0;
   document.querySelectorAll('.doc').forEach(d => {
     const any = !active || d.querySelectorAll('tbody tr:not(.hidden)').length;
     d.style.display = any ? '' : 'none';
     const tag = d.querySelector('.year-tag');
     if (tag) tag.classList.toggle('off', !any || d.dataset.year === year);
-    if (any) year = d.dataset.year;
+    if (any) { year = d.dataset.year; docs++; }
   });
+  // Сколько осталось — и строк, и документов сразу: одна фамилия тянется
+  // через десятки книг, и «12 поисков» само по себе не говорит, много это
+  // документов или один. Пустой ответ называется словами: без надписи
+  // фильтр, срезавший всё, выглядел бы поломкой страницы.
+  count.classList.toggle('on', !!active);
+  if (active) {
+    count.innerHTML = shown
+      ? `Показано <b>${shown}</b> ${plural(shown, 'поиск', 'поиска', 'поисков')}`
+        + ` в <b>${docs}</b> ${plural(docs, 'документе', 'документах', 'документах')}`
+      : 'Ничего не нашлось';
+  }
   // Свёрнутая таблица прячет как раз то, что искали, поэтому на время
   // фильтра совпадения раскрываются сами. Что человек открыл руками до
   // фильтра, запоминается и возвращается, когда фильтр снимут.
@@ -841,7 +869,8 @@ def render(docs) -> str:
            year_strip(docs),
            "<input id=filter type=search placeholder='Фильтр по фамилии, "
            "документу или странице…' autocomplete=off>",
-           status_chips(searches)]
+           status_chips(searches),
+           "<p id=count class=count role=status aria-live=polite></p>"]
 
     # Якорь года ставится перед первым делом этого года. Дела уже
     # отсортированы по годам, так что «первое» — это просто смена года.

@@ -67,6 +67,14 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 .badge.chip .n { opacity: .7; margin-left: 6px;
                  font-variant-numeric: tabular-nums; }
 
+/* Сколько строк осталось после фильтра. Пока фильтр не тронут, строки
+   нет вовсе: без фильтра это число уже стоит в счётчиках наверху. */
+.count { display: none; color: var(--dim); font-size: 13px;
+         margin: -14px 0 24px; }
+.count.on { display: block; }
+.count b { color: var(--ink); font-weight: 600;
+           font-variant-numeric: tabular-nums; }
+
 .doc { position: relative; margin-bottom: 34px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
 .doc .meta { color: var(--dim); font-size: 13px; margin-bottom: 8px; }
@@ -261,6 +269,7 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 <div class=years><a class='year no' href='#g1866' title='2 дела за этот год'>1866<i class=more>2</i></a><a class='year no' href='#g1867' title='2 дела за этот год'>1867<i class=more>2</i></a><a class='year no' href='#g1868'>1868</a><span class='year gap' title='не смотрели'>1869</span><span class='year gap' title='не смотрели'>1870</span><span class='year gap' title='не смотрели'>1871</span><span class='year gap' title='не смотрели'>1872</span><a class='year ok' href='#g1873' title='2 дела за этот год'>1873<i class=more>2</i></a><a class='year ok' href='#g1874' title='2 дела за этот год'>1874<i class=more>2</i></a><span class='year gap' title='не смотрели'>1875</span><a class='year maybe' href='#g1876' title='2 дела за этот год'>1876<i class=more>2</i></a><a class='year no' href='#g1877'>1877</a><span class='year gap' title='не смотрели'>1878</span><span class='year gap' title='не смотрели'>1879</span><a class='year no' href='#g1880'>1880</a><a class='year no' href='#g1881'>1881</a><a class='year ok' href='#g1882'>1882</a><a class='year no' href='#g1883'>1883</a><a class='year maybe' href='#g1884'>1884</a><span class='year gap' title='не смотрели'>1885</span><span class='year gap' title='не смотрели'>1886</span><a class='year maybe' href='#g1887' title='2 дела за этот год'>1887<i class=more>2</i></a><a class='year no' href='#g1888'>1888</a><a class='year ok' href='#g1889' title='2 дела за этот год'>1889<i class=more>2</i></a><span class='year gap' title='не смотрели'>1890</span><a class='year maybe' href='#g1891' title='2 дела за этот год'>1891<i class=more>2</i></a><a class='year maybe' href='#g1892' title='2 дела за этот год'>1892<i class=more>2</i></a><a class='year maybe' href='#g1893' title='2 дела за этот год'>1893<i class=more>2</i></a><a class='year ok' href='#g1894' title='3 дела за этот год'>1894<i class=more>3</i></a><a class='year no' href='#g1895' title='3 дела за этот год'>1895<i class=more>3</i></a><a class='year no' href='#g1896' title='2 дела за этот год'>1896<i class=more>2</i></a><a class='year ok' href='#g1897'>1897</a><a class='year maybe' href='#g1898'>1898</a><a class='year maybe' href='#g1899' title='2 дела за этот год'>1899<i class=more>2</i></a><a class='year ok' href='#g1900' title='2 дела за этот год'>1900<i class=more>2</i></a><a class='year ok' href='#g1901' title='3 дела за этот год'>1901<i class=more>3</i></a><a class='year ok' href='#g1902' title='2 дела за этот год'>1902<i class=more>2</i></a><a class='year ok' href='#g1903' title='2 дела за этот год'>1903<i class=more>2</i></a><a class='year maybe' href='#g1904' title='3 дела за этот год'>1904<i class=more>3</i></a><a class='year maybe' href='#g1905' title='3 дела за этот год'>1905<i class=more>3</i></a><a class='year maybe' href='#g1906' title='3 дела за этот год'>1906<i class=more>3</i></a><a class='year ok' href='#g1907' title='2 дела за этот год'>1907<i class=more>2</i></a><a class='year ok' href='#g1908' title='3 дела за этот год'>1908<i class=more>3</i></a><a class='year ok' href='#g1909' title='3 дела за этот год'>1909<i class=more>3</i></a><a class='year ok' href='#g1910' title='3 дела за этот год'>1910<i class=more>3</i></a><a class='year ok' href='#g1911' title='379 дел за этот год'>1911<i class=more>379</i></a><a class='year ok' href='#g1912' title='88 дел за этот год'>1912<i class=more>88</i></a><a class='year no' href='#g1913'>1913</a><span class='year gap' title='не смотрели'>1914</span><a class='year no' href='#g1915' title='2 дела за этот год'>1915<i class=more>2</i></a><span class='year gap' title='не смотрели'>1916</span><span class='year gap' title='не смотрели'>1917</span><span class='year gap' title='не смотрели'>1918</span><a class='year maybe' href='#g1919' title='3 дела за этот год'>1919<i class=more>3</i></a><a class='year noyear maybe' href='#no-year' title='8 дел без года: том, который в полосу лет не встаёт'>без года<i class=more>8</i></a></div><p class=years-note>1866—1919: просмотрено 542 из 550 дел за 40 лет, 14 лет в промежутке не открывали. Ещё 8 дел без года — они в конце списка. Цифра в клетке — сколько дел за этот год; цвет по лучшему из них. Зелёный — найден человек, чьё родство установлено; синий — фамилия найдена, но это однофамилец или родство не доказано; серый — искали и не нашли, пунктир — дело не смотрели.</p>
 <input id=filter type=search placeholder='Фильтр по фамилии, документу или странице…' autocomplete=off>
 <div class=chips role=group aria-label='Фильтр по итогу'><button type=button class='badge no chip' data-s='no' aria-pressed=false>не найдена<span class=n>1048</span></button><button type=button class='badge maybe chip' data-s='maybe' aria-pressed=false>найдена, родство не установлено<span class=n>33</span></button><button type=button class='badge ok chip' data-s='ok' aria-pressed=false>найдена, родство подтверждено<span class=n>19</span></button></div>
+<p id=count class=count role=status aria-live=polite></p>
 <div class=year-mark id='g1866'></div>
 <section class=doc id='bv0000027' data-year='1866'>
 <div class='year-tag' aria-hidden=true>1866</div>
@@ -16200,6 +16209,13 @@ footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
 </div><script>
 const box = document.getElementById('filter');
 const chips = Array.from(document.querySelectorAll('.chip'));
+const count = document.getElementById('count');
+
+function plural(n, one, few, many) {
+  if (n % 100 >= 11 && n % 100 <= 14) return many;
+  const d = n % 10;
+  return d === 1 ? one : d >= 2 && d <= 4 ? few : many;
+}
 
 // Оба фильтра — поле и чипы итога — сходятся здесь. Раздельные
 // обработчики второй раз показывали бы строки, спрятанные первым.
@@ -16210,24 +16226,37 @@ function apply() {
   const on = chips.filter(c => c.getAttribute('aria-pressed') === 'true')
                   .map(c => c.dataset.s);
   const active = q || on.length;
+  let shown = 0;
   document.querySelectorAll('tbody tr').forEach(tr => {
     const hide = (q && !tr.dataset.k.includes(q))
               || (on.length && !on.includes(tr.dataset.s));
     tr.classList.toggle('hidden', hide);
+    if (!hide) shown++;
   });
   // Метка года принадлежит всему блоку года, а не первому делу в списке:
   // если фильтр спрятал именно его, надпись переезжает на первое
   // уцелевшее дело того же года. Без фильтра всё возвращается на место.
   // Дело, по которому ещё не искали, строк не имеет вовсе — при снятом
   // фильтре ему прятаться не за что.
-  let year = null;
+  let year = null, docs = 0;
   document.querySelectorAll('.doc').forEach(d => {
     const any = !active || d.querySelectorAll('tbody tr:not(.hidden)').length;
     d.style.display = any ? '' : 'none';
     const tag = d.querySelector('.year-tag');
     if (tag) tag.classList.toggle('off', !any || d.dataset.year === year);
-    if (any) year = d.dataset.year;
+    if (any) { year = d.dataset.year; docs++; }
   });
+  // Сколько осталось — и строк, и документов сразу: одна фамилия тянется
+  // через десятки книг, и «12 поисков» само по себе не говорит, много это
+  // документов или один. Пустой ответ называется словами: без надписи
+  // фильтр, срезавший всё, выглядел бы поломкой страницы.
+  count.classList.toggle('on', !!active);
+  if (active) {
+    count.innerHTML = shown
+      ? `Показано <b>${shown}</b> ${plural(shown, 'поиск', 'поиска', 'поисков')}`
+        + ` в <b>${docs}</b> ${plural(docs, 'документе', 'документах', 'документах')}`
+      : 'Ничего не нашлось';
+  }
   // Свёрнутая таблица прячет как раз то, что искали, поэтому на время
   // фильтра совпадения раскрываются сами. Что человек открыл руками до
   // фильтра, запоминается и возвращается, когда фильтр снимут.

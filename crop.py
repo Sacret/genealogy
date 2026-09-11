@@ -26,6 +26,7 @@
 
 import argparse, csv, io, json, pathlib, subprocess, sys, tempfile
 
+import boxes
 from docstore import allow_big_scans, doc_dir
 from fetch import ensure_page
 from rescue import BAND, STEP, columns
@@ -150,16 +151,16 @@ def main():
         seen = list(words_in_columns(img))   # и полосы не дались — по колонкам
     # Сначала отбор по совпадению, и только потом отсев наложившихся
     # боксов: порядок обратный стоил бы совпавшего прочтения.
-    hits, boxes = [], []
+    hits, taken = [], []
     for text, box in seen:
         norm = normalize(text)
         if not norm:
             continue
         if prefix_distance(stem, norm, fragile=fragile)[0] > thr:
             continue
-        if any(overlap(box, b) > 0.5 for b in boxes):
+        if any(overlap(box, b) > 0.5 for b in taken):
             continue
-        boxes.append(box)
+        taken.append(box)
         hits.append((text, box, norm))
 
     for text, (x0, y0, x1, y1), norm in hits:
@@ -172,6 +173,9 @@ def main():
                    min(im.width, x1 + a.pad), min(im.height, y1 + a.pad))
         dst = out / f"p{a.page:04d}_{stem}_{found}.png"
         im.crop(box).save(dst)
+        # Куда резали — то и запоминаем: без этих чисел журнал показывает
+        # вырезку, но не может показать её место на странице. См. boxes.py.
+        boxes.record(a.ident, dst.name, a.page, box, im.size)
         print(f"{dst}   {text!r}  score {score(stem, norm, fragile=fragile):.3f}")
     if not found:
         print(f"на стр. {a.page} совпадений не нашлось ни по целой странице, "

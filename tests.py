@@ -4,8 +4,9 @@
 import re
 import sys
 from catalog import SKIP_BY_ID, build, classify, years_covered
-from journal import markup, render, year_strip
+from journal import markup, render, shot_page, year_strip
 from docstore import BIG_SCAN_PIXELS, ROOT, allow_big_scans
+import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, kin_persons
 from surnamefind.search import find_in_text, stem_query
@@ -65,10 +66,11 @@ def main():
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
            + years_suite() + chips_suite() + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + namesakes_suite()
-           + pamyatnye_suite() + gitignore_suite())
+           + pamyatnye_suite() + gitignore_suite() + boxes_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 9)
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6
+             + 9 + 10)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -675,6 +677,69 @@ def namesakes_suite():
                      ("и с именем", "Алексей Иосифович Могучев" in scell)]:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+    return bad
+
+
+# Вырезка показывает, что фамилия нашлась; страница — где она стоит, в
+# алфавитном списке или в объявлении о торгах. Второе держится на
+# координатах из crops/boxes.json, и цена ошибки здесь не «рамка чуть
+# левее»: страница со списком фамилий — это сорок строк, различающихся
+# парой букв, и рамка, поставленная не туда, обводит однофамильца.
+def boxes_suite():
+    """Координаты вырезок и рамка вокруг находки в журнале."""
+    from PIL import Image
+
+    allow_big_scans()
+    bad = 0
+    print("\nместо вырезки на странице:")
+    ident, name = "bv0000043", "p0044_могучев_1.png"
+    crop = ROOT / ident / "crops" / name
+    scan = ROOT / ident / "scans" / "p0044.jpg"
+    kept = boxes.load(ident).get(name, {})
+    found = boxes.locate(scan, crop)
+    # Та же вырезка, но чужая страница: совпадения быть не должно. Это и
+    # есть главная проверка — «похоже» здесь не годится, а `locate` ищет
+    # точное вхождение пиксель в пиксель.
+    other = boxes.locate(ROOT / ident / "scans" / "p0048.jpg", crop)
+
+    place = shot_page(ident, crop)
+    gone = shot_page(ident, ROOT / ident / "crops" / "p0598_багрлмов_1.png")
+
+    checks = [
+        ("координаты записаны", bool(kept) and len(kept.get("box", [])) == 4),
+        ("вырезка нашлась на своей странице", found is not None),
+        ("и там, где записано", found == tuple(kept.get("box", []))),
+        ("на чужой странице не нашлась", other is None),
+        ("размер страницы записан верно",
+         kept.get("size") == list(Image.open(scan).size)),
+        ("бокс лежит внутри страницы",
+         bool(kept) and 0 <= kept["box"][0] < kept["box"][2] <= kept["size"][0]
+         and 0 <= kept["box"][1] < kept["box"][3] <= kept["size"][1]),
+        ("журнал знает страницу вырезки",
+         place is not None and str(place[0]) == f"{ident}/scans/p0044.jpg"),
+        # Скан этой страницы выброшен prune.py, и предлагать её нечем:
+        # ссылка на несуществующий файл хуже, чем её отсутствие.
+        ("без скана страницы не предлагает", gone is None),
+    ]
+    for label, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+
+    # И то же самое глазами журнала: у вырезки с координатами есть и
+    # страница, и рамка, а сама рамка задана в долях от скана.
+    row = {"surname": "Могучевъ", "status": "found", "date": "2026-01-01",
+           "verdict": "", "confirmed": ["44"], "kin": ["44"],
+           "persons": {"44": "i0026"}, "hits": 3, "pages_with_hits": ["44"]}
+    html = render({ident: {"meta": {}, "rows": [row], "coverage": None,
+                           "year": 1911}})
+    cell = html.split("<td class=result>")[1].split("</td>")[0]
+    for label, ok in [
+            ("в строке стоит страница", "data-page=" in cell),
+            ("и координаты при ней",
+             f"data-box='{','.join(str(v) for v in kept.get('box', []))}'"
+             in cell)]:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad
 
 

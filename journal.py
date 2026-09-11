@@ -14,6 +14,7 @@ import pathlib
 import re
 from collections import OrderedDict
 
+import boxes
 from docstore import (ROOT, documents, latest_verdicts, load_meta,
                       meta_year, persons as roster, read_log)
 
@@ -444,14 +445,33 @@ a.year:hover { border-color: var(--accent); }
    до её начала было бы нечем. */
 .lbpad { display: inline-flex; align-items: center; justify-content: center;
          min-width: 100%; min-height: 100%; padding: 16px; }
-.lbpad img { display: block; background: #fff; padding: 6px;
-             border-radius: 6px; user-select: none; -webkit-user-drag: none; }
+/* Белое поле вокруг скана сделано рамкой, а не отступом, и не просто так:
+   рамка вокруг найденного слова ставится в долях от картинки, а проценты
+   у absolute-потомка отмеряются от padding-box — то есть изнутри border,
+   но снаружи padding. С отступом рамка съезжала бы на его ширину. */
+.lbshell { position: relative; display: block; background: #fff;
+           border: 6px solid #fff; border-radius: 6px; overflow: hidden; }
+.lbshell img { display: block; user-select: none; -webkit-user-drag: none; }
+
+/* Найденное слово на развёрнутой странице. Цвет здесь один на обе темы и
+   взят не из палитры: рамка лежит не на фоне журнала, а на скане, а скан
+   белый и в тёмной теме тоже. Тень в полэкрана гасит всё, кроме рамки, —
+   без неё на листе в две тысячи пикселей, ужатом до восьмисот, слово
+   пришлось бы искать заново, ради чего страницу и открывали. Гасит не
+   до черноты: соседние строки должны читаться, иначе окружение находки —
+   список это или приказ — так и осталось бы неизвестным. */
+.lbframe { position: absolute; border: 2px solid #d1452b; border-radius: 3px;
+           pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .38); }
 
 /* Узкое окно: заголовок уезжает под кнопки, чтобы «полный размер» и
    крестик не выдавливались за край. */
 @media (max-width: 700px) {
   .lbbar { flex-wrap: wrap; }
   .lbtitle { order: 2; flex: 1 0 100%; margin-right: 0; }
+  /* С переключателем страницы кнопок стало на одну больше, и на телефоне
+     шапка вставала в три ряда, съедая треть окна. Уходит «полный размер»:
+     та же ссылка стоит в строке журнала, под самой вырезкой. */
+  #lbfull { display: none; }
 }
 .empty { color: var(--dim); }
 footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
@@ -603,16 +623,29 @@ function sync(force) {
 // журнала она годится, чтобы узнать слово, но не чтобы читать буквы. Здесь
 // она открывается во весь экран и тянется дальше кнопками: спор о том, «ъ»
 // там или «ь», решается только увеличением.
+//
+// Открывается окно, впрочем, страницей, а не вырезкой: вырезка отвечает,
+// нашлась ли фамилия, а страница — где она стоит, в алфавитном списке или
+// в объявлении о торгах. Найденное слово обведено рамкой по координатам из
+// boxes.json, остальное притушено. Страница — файл рядом с журналом, и
+// пока она грузится, в окне стоит вырезка, вшитая в страницу; она же
+// остаётся насовсем, если файла рядом не оказалось.
 const lb = document.getElementById('lb');
 const lbimg = document.getElementById('lbimg');
 const stage = document.getElementById('lbstage');
 const zlabel = document.getElementById('lbzoom');
+const frame = document.getElementById('lbframe');
+const pagebtn = document.getElementById('lbpage');
+const fulllink = document.getElementById('lbfull');
+const caption = document.getElementById('lbtitle');
 // Свои размеры картинки берём у превью: оно уже нарисовано, а у картинки в
 // окне naturalWidth появляется только после загрузки — считать по нему
 // значило бы мерить нули. Они же и мерка увеличения: 100% — это вырезка
 // такой, какой она стоит в строке, независимо от того, сколько пикселей
 // в самом скане.
 let nw = 1, nh = 1, zoom = 1, want = 0;
+// С чего окно открыли и что в нём сейчас: вырезка или целая страница.
+let shot = null, whole = false;
 
 function setZoom(z) {
   const pw = lbimg.offsetWidth || 1, ph = lbimg.offsetHeight || 1;
@@ -620,47 +653,108 @@ function setZoom(z) {
   // увеличение уводило бы вырезку в левый верхний угол.
   const cx = (stage.scrollLeft + stage.clientWidth / 2) / pw;
   const cy = (stage.scrollTop + stage.clientHeight / 2) / ph;
-  zoom = Math.min(16, Math.max(.5, z));
+  // Нижний порог у вырезки и у страницы разный. Вырезке меньше половины
+  // натуральной величины незачем — она и так мельче окна; страницу же
+  // «по окну» ужимает впятеро, и порог в половину не давал вписать её
+  // целиком, останавливая ровно на 50% и обрезая лист по краям.
+  zoom = Math.min(16, Math.max(whole ? .05 : .5, z));
   lbimg.style.width = Math.round(nw * zoom) + 'px';
   zlabel.textContent = Math.round(zoom * 100) + '%';
   stage.scrollLeft = cx * lbimg.offsetWidth - stage.clientWidth / 2;
   stage.scrollTop = cy * lbimg.offsetHeight - stage.clientHeight / 2;
 }
 
-// «По окну» для вырезки — это увеличение: она меньше окна во все стороны,
-// и показать её один к одному значило бы открыть окно ради той же марки,
-// что стояла в строке. Ниже натуральной величины не опускаемся и выше
-// восьмикратной не поднимаемся: дальше растёт не буква, а зерно скана.
+// «По окну» значит разное для вырезки и для страницы. Вырезка меньше окна
+// во все стороны, и показать её один к одному значило бы открыть окно ради
+// той же марки, что стояла в строке: её тянем вверх, но не выше
+// восьмикратной — дальше растёт не буква, а зерно скана. Страницу, наоборот,
+// вписываем целиком: за этим её и просят.
 function fit() {
   const w = (stage.clientWidth - 44) / nw, h = (stage.clientHeight - 44) / nh;
-  setZoom(Math.max(1, Math.min(w, h, 8)));
+  setZoom(whole ? Math.min(w, h) : Math.max(1, Math.min(w, h, 8)));
   stage.scrollLeft = (stage.scrollWidth - stage.clientWidth) / 2;
   stage.scrollTop = (stage.scrollHeight - stage.clientHeight) / 2;
 }
 
+
+function showCrop() {
+  const img = shot.querySelector('img');
+  whole = false;
+  frame.hidden = true;
+  nw = img.naturalWidth || img.offsetWidth || 1;
+  nh = img.naturalHeight || img.offsetHeight || 1;
+  lbimg.src = img.src;
+  lbimg.alt = img.alt;
+  caption.textContent = img.alt;
+  fulllink.href = shot.dataset.full;
+  fulllink.title = 'Открыть файл вырезки';
+  pagebtn.textContent = 'страница целиком';
+  fit();
+  // В страницу вырезка вшита ужатой до 620 px — в скане их две тысячи, и
+  // вшивать столько восемьдесят раз значило бы вчетверо утяжелить журнал
+  // ради картинок, которые почти всегда просто пролистывают. Поэтому окно,
+  // открывшись, подменяет превью файлом из crops/: место и размер те же,
+  // резкость — скана. Журнал, унесённый от своих папок, файла не найдёт и
+  // останется с превью — так же, как ссылка «полный размер».
+  const mine = ++want;
+  const hi = new Image();
+  hi.onload = () => { if (mine === want) lbimg.src = hi.src; };
+  hi.src = shot.dataset.full;
+}
+
+function showWhole() {
+  const b = shot.dataset.box.split(',').map(Number);
+  const sz = shot.dataset.size.split(',').map(Number);
+  const mine = ++want;
+  const hi = new Image();
+  // Страница лежит файлом рядом с журналом, а не внутри него. Не нашлась —
+  // значит журнал унесли от папок или страницу вычистил prune.py. Тогда
+  // остаёмся с вырезкой и убираем переключатель: кнопка, которая ничего не
+  // открывает, хуже, чем её отсутствие.
+  hi.onerror = () => {
+    if (mine !== want) return;
+    shot.removeAttribute('data-page');
+    pagebtn.hidden = true;
+    showCrop();
+  };
+  hi.onload = () => {
+    if (mine !== want) return;
+    whole = true;
+    nw = sz[0];
+    nh = sz[1];
+    lbimg.src = hi.src;
+    // Рамка ставится в долях от картинки, поэтому увеличение её не
+    // касается: доли те же и при 50%, и при 600%.
+    frame.style.left = 100 * b[0] / nw + '%';
+    frame.style.top = 100 * b[1] / nh + '%';
+    frame.style.width = 100 * (b[2] - b[0]) / nw + '%';
+    frame.style.height = 100 * (b[3] - b[1]) / nh + '%';
+    frame.hidden = false;
+    caption.textContent = lbimg.alt + ' · страница целиком';
+    fulllink.href = shot.dataset.page;
+    fulllink.title = 'Открыть файл страницы';
+    pagebtn.textContent = 'одна вырезка';
+    // Страница открывается вписанной в окно, а не наведённой на слово:
+    // за ней идут ради того, что находку окружает, и первым делом
+    // смотрят, что это за лист вообще — список, приказ или объявление.
+    // Искать на нём слово глазами не приходится и при таком уменьшении:
+    // рамка — единственное непритушенное место на листе.
+    fit();
+  };
+  hi.src = shot.dataset.page;
+}
+
 document.querySelectorAll('.crop .shot').forEach(btn => {
   btn.addEventListener('click', () => {
-    const img = btn.querySelector('img');
-    nw = img.naturalWidth || img.offsetWidth || 1;
-    nh = img.naturalHeight || img.offsetHeight || 1;
-    lbimg.src = img.src;
-    lbimg.alt = img.alt;
-    document.getElementById('lbtitle').textContent = img.alt;
-    document.getElementById('lbfull').href = btn.dataset.full;
+    shot = btn;
+    pagebtn.hidden = !btn.dataset.page;
     lb.showModal();
-    fit();   // размеры окна известны только после showModal
-    // В страницу вырезка вшита ужатой до 620 px — в скане их две тысячи, и
-    // вшивать столько восемьдесят раз значило бы вчетверо утяжелить журнал
-    // ради картинок, которые почти всегда просто пролистывают. Поэтому
-    // окно, открывшись, подменяет превью файлом из crops/: место и размер
-    // те же, резкость — скана. Журнал, унесённый от своих папок, файла не
-    // найдёт и останется с превью — так же, как ссылка «полный размер».
-    const mine = ++want;
-    const hi = new Image();
-    hi.onload = () => { if (mine === want) lbimg.src = hi.src; };
-    hi.src = btn.dataset.full;
+    showCrop();   // размеры окна известны только после showModal
+    if (btn.dataset.page) showWhole();
   });
 });
+
+pagebtn.addEventListener('click', () => whole ? showCrop() : showWhole());
 
 document.getElementById('lbin').addEventListener('click', () => setZoom(zoom * 1.5));
 document.getElementById('lbout').addEventListener('click', () => setZoom(zoom / 1.5));
@@ -674,6 +768,10 @@ lb.addEventListener('keydown', e => {
   if (k === '+' || k === '=') setZoom(zoom * 1.5);
   else if (k === '-' || k === '_') setZoom(zoom / 1.5);
   else if (k === '0') fit();
+  // Переключатель есть и на клавише: страницу с вырезкой сличают туда-сюда,
+  // и каждый раз целиться в кнопку — лишнее движение.
+  else if ((k === 'п' || k === 'p') && !pagebtn.hidden)
+    whole ? showCrop() : showWhole();
   else return;
   e.preventDefault();
 });
@@ -943,6 +1041,51 @@ def group_by_page(crops):
     for page, f in crops:
         out.setdefault(page, []).append(f)
     return list(out.items())
+
+
+def shot_page(ident: str, f: pathlib.Path):
+    """Страница, с которой снята вырезка, и место вырезки на ней.
+
+    Вырезка отвечает на вопрос «нашлась ли фамилия», страница — на
+    вопрос «где она стоит»: в алфавитном списке, в приказе или в
+    объявлении о торгах. Второй вопрос задают сразу после первого, и до
+    сих пор на него отвечали, открывая скан руками.
+
+    Координаты лежат в `crops/boxes.json` (см. boxes.py), но одних их
+    мало: скан — это мегабайт рядом с журналом, а не внутри него, и
+    prune.py оставляет на диске только страницы подтверждённых находок.
+    Нет файла — нет и предложения его открыть.
+    """
+    info = boxes.load(ident).get(f.name)
+    if not info:
+        return None
+    page = ROOT / ident / "scans" / f"p{int(info['page']):04d}.jpg"
+    if not page.exists():
+        return None
+    return page.relative_to(ROOT), info["box"], info["size"]
+
+
+def shot_html(ident: str, surname: str, page: int, f: pathlib.Path) -> str:
+    """Вырезка в строке журнала: картинка-кнопка и подпись под ней."""
+    place = shot_page(ident, f)
+    crop = e(str(f.relative_to(ROOT)))
+    if place:
+        src, box, size = place
+        where = (f" data-page='{e(str(src))}'"
+                 f" data-box='{','.join(str(int(v)) for v in box)}'"
+                 f" data-size='{','.join(str(int(v)) for v in size)}'")
+        title = "Открыть страницу целиком, с выделенным словом"
+        cap = (f"вырезка из скана, <a href='{e(str(src))}'>страница целиком</a>"
+               f", <a href='{crop}'>полный размер</a>")
+    else:
+        where, title = "", "Открыть вырезку крупно"
+        cap = f"вырезка из скана, <a href='{crop}'>полный размер</a>"
+    return (f"<div class=crop>"
+            f"<button class=shot type=button title='{title}' "
+            f"data-full='{crop}'{where}>"
+            f"<img alt='{e(surname)}, стр. {page}' src='{thumb_uri(f)}'>"
+            f"</button>"
+            f"<div class=cap>{cap}</div></div>")
 
 
 def thumb_uri(path: pathlib.Path, max_w=620) -> str:
@@ -1351,15 +1494,7 @@ def render(docs) -> str:
                           f"<span class='badge {mark_cls}'>{who}</span>"
                           f"{named}{many}</div>")
                 shots += "".join(
-                    f"<div class=crop>"
-                    f"<button class=shot type=button "
-                    f"title='Открыть вырезку крупно' "
-                    f"data-full='{e(str(f.relative_to(ROOT)))}'>"
-                    f"<img alt='{e(r['surname'])}, "
-                    f"стр. {page}' src='{thumb_uri(f)}'></button>"
-                    f"<div class=cap>вырезка из скана, "
-                    f"<a href='{e(f.relative_to(ROOT))}'>полный размер</a>"
-                    f"</div></div>" for f in files)
+                    shot_html(ident, r["surname"], page, f) for f in files)
                 shots += "</div>"
             out.append(f"<td class=result><span class='badge {cls}'>{label}"
                        f"</span>{note}{shots}</td>")
@@ -1385,6 +1520,8 @@ def render(docs) -> str:
         "<button id=lbin type=button aria-label='Увеличить' "
         "title='Увеличить (+)'>+</button>"
         "<button id=lbfit type=button title='Вписать в окно (0)'>по окну</button>"
+        "<button id=lbpage type=button title='Страница целиком или одна "
+        "вырезка (п)'>страница целиком</button>"
         "<a id=lbfull href='#' title='Открыть файл вырезки'>полный размер</a>"
         # Фокус при открытии — на крестике: окно всё равно закрывают чаще,
         # чем крутят, а без autofocus браузер ставит его на первую кнопку —
@@ -1393,7 +1530,9 @@ def render(docs) -> str:
         "title='Закрыть (Esc)'>×</button>"
         "</div>"
         "<div class=lbstage id=lbstage><div class=lbpad>"
-        "<img id=lbimg alt=''></div></div>"
+        "<div class=lbshell><img id=lbimg alt=''>"
+        "<div class=lbframe id=lbframe hidden></div>"
+        "</div></div></div>"
         "</dialog>")
     out.append(f"<script>{JS}</script></body></html>")
     return "\n".join(out)

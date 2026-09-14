@@ -275,6 +275,11 @@ a.year:hover { border-color: var(--accent); }
 .year.wait { background: var(--wait-bg); color: var(--wait-ink);
              border-color: transparent; }
 .year.gap { background: transparent; border-style: dashed; opacity: .55; }
+/* Год, из которого фильтр не оставил ни одного дела. Рамка сплошная, а не
+   пунктир, как у пробела: год смотрели, просто в выборку он не попал.
+   Цвет итога снят — он говорил бы о делах, которых сейчас не видно. */
+.year.off { background: transparent; color: var(--dim); border-color: var(--line);
+            font-weight: normal; opacity: .4; pointer-events: none; }
 /* Пузырь дел без года: тот же ряд, но слово вместо числа, поэтому
    без табличных цифр и с полями пошире — иначе буквы жмутся к краю. */
 .year.noyear { min-width: auto; padding: 5px 10px;
@@ -19028,6 +19033,22 @@ function apply() {
     });
     const tag = b.querySelector('.year-tag');
     if (tag) tag.classList.toggle('off', !left);
+    // Пузырь того же года в полосе гаснет вместе с блоком: иначе он вёл бы
+    // к якорю, под которым фильтр ничего не оставил. Связь — через якорь,
+    // стоящий прямо перед блоком, на него же ссылается пузырь.
+    const mark = b.previousElementSibling;
+    const cell = mark && mark.classList.contains('year-mark') &&
+                 document.querySelector(`.years a[href="#${mark.id}"]`);
+    if (cell) {
+      cell.classList.toggle('off', !left);
+      if (left) {
+        cell.removeAttribute('aria-disabled');
+        cell.removeAttribute('tabindex');
+      } else {
+        cell.setAttribute('aria-disabled', 'true');
+        cell.setAttribute('tabindex', '-1');
+      }
+    }
   });
   // Сколько осталось — и строк, и документов сразу: одна фамилия тянется
   // через десятки книг, и «12 поисков» само по себе не говорит, много это
@@ -19053,7 +19074,33 @@ function apply() {
     }
   });
 }
-box.addEventListener('input', apply);
+// Фильтр живёт в адресе — ?q=фамилия&s=ok,maybe, — чтобы выборку можно
+// было переслать ссылкой и открыть ровно на ней. Пишется replaceState, а
+// не pushState: каждая набранная буква иначе стала бы шагом «назад». Якорь
+// дела (#bv0000386) при этом остаётся на месте — он живёт в hash, а не в
+// параметрах.
+function syncURL() {
+  const url = new URL(location.href);
+  const q = box.value.trim();
+  const on = chips.filter(c => c.getAttribute('aria-pressed') === 'true')
+                  .map(c => c.dataset.s);
+  if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+  if (on.length) url.searchParams.set('s', on.join(','));
+  else url.searchParams.delete('s');
+  history.replaceState(null, '', url);
+}
+function restoreFromURL() {
+  const params = new URLSearchParams(location.search);
+  const q = params.get('q');
+  if (q) box.value = q;
+  const s = (params.get('s') || '').split(',').filter(Boolean);
+  // Итога, которого в журнале уже нет, среди чипов просто не найдётся —
+  // старая ссылка откроется на том, что от её выборки осталось.
+  chips.forEach(c => c.setAttribute('aria-pressed',
+                                    s.includes(c.dataset.s) ? 'true' : 'false'));
+  if (q || s.length) apply();
+}
+box.addEventListener('input', () => { apply(); syncURL(); });
 chips.forEach(c => c.addEventListener('click', () => {
   // Чипы независимы: можно оставить и находки с родством, и находки без
   // него. Повторное нажатие снимает — иначе выбранный по ошибке итог
@@ -19061,7 +19108,9 @@ chips.forEach(c => c.addEventListener('click', () => {
   c.setAttribute('aria-pressed',
                  c.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
   apply();
+  syncURL();
 }));
+restoreFromURL();
 
 // Ссылка на родословную стоит и в свёрнутой сводке, внутри <summary>:
 // без этого клик по имени заодно схлопывал бы таблицу, которую человек
@@ -19303,4 +19352,30 @@ addEventListener('resize', () => { measure(); if (lb.open) fit(); });
 // не там.
 addEventListener('load', measure);
 measure();
+
+// Якорь в адресе — это просьба показать дело или год, и при перезагрузке
+// тоже. Сам браузер при перезагрузке якорь не слушает: он возвращает
+// прокрутку, какая была, и страница открывалась где-то посередине, мимо
+// дела из адреса. Поэтому восстановление снято — но только когда якорю
+// есть куда вести, иначе перезагрузка без якоря бросала бы читающего
+// наверх.
+function anchorTarget() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  return id ? document.getElementById(id) : null;
+}
+if (anchorTarget() && 'scrollRestoration' in history) {
+  history.scrollRestoration = 'manual';
+}
+// Прокрутка дважды: сразу — чтобы не мелькнул верх страницы, и на load —
+// когда догрузился шрифт и шапка перемерена, иначе дело съехало бы на её
+// разницу. Если человек успел прокрутить сам, второй раз его не дёргаем.
+let moved = false;
+['wheel', 'touchstart', 'keydown'].forEach(t =>
+  addEventListener(t, () => { moved = true; }, {once: true, passive: true}));
+function toAnchor() {
+  const el = anchorTarget();
+  if (el) el.scrollIntoView();
+}
+toAnchor();
+addEventListener('load', () => { if (!moved) toAnchor(); });
 </script></body></html>

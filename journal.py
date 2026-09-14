@@ -488,6 +488,22 @@ a.year:hover { border-color: var(--accent); }
 .empty { color: var(--dim); }
 footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
          border-top: 1px solid var(--line); padding-top: 14px; }
+
+/* Возврат наверх: стоит в углу всегда, не появляется и не прячется по
+   прокрутке — кнопка, которая то есть, то нет, заставляет искать себя
+   глазами. Ниже севшей шапки по слою: окно вырезки всё равно поверх. */
+.totop {
+  position: fixed; right: 20px; bottom: 20px; z-index: 50;
+  width: 44px; height: 44px; border-radius: 50%; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card); color: var(--accent);
+  border: 1px solid var(--line); cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
+}
+.totop:hover { border-color: var(--accent); }
+.totop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.totop svg { width: 18px; height: 18px; }
+@media (max-width: 700px) { .totop { right: 14px; bottom: 14px; } }
 """
 
 JS = """
@@ -891,6 +907,15 @@ function toAnchor() {
 }
 toAnchor();
 addEventListener('load', () => { if (!moved) toAnchor(); });
+
+// Наверх — и якорь из адреса долой: иначе перезагрузка унесла бы обратно к
+// делу, от которого только что ушли. Фильтр в параметрах остаётся.
+document.getElementById('totop').addEventListener('click', () => {
+  if (location.hash) {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  scrollTo({top: 0, behavior: 'smooth'});
+});
 """
 
 
@@ -1590,6 +1615,11 @@ def render(docs) -> str:
     out.append("<footer>Пересобирается автоматически при каждом поиске. "
                "Источник — <code>&lt;документ&gt;/searches.jsonl</code>.</footer>")
     out.append("</div>")   # .wrap
+    out.append(
+        "<button id=totop class=totop type=button aria-label='Наверх' "
+        "title='Наверх'><svg viewBox='0 0 24 24' fill=none stroke=currentColor "
+        "stroke-width=2.4 stroke-linecap=round stroke-linejoin=round "
+        "aria-hidden=true><path d='M12 19V5M5 12l7-7 7 7'/></svg></button>")
     # Окно для вырезки — одно на всю страницу: пятьдесят копий одной и той
     # же разметки, по одной на картинку, весили бы столько же, сколько сами
     # вырезки. Стоит вне .wrap: модальное окно всё равно рисуется поверх

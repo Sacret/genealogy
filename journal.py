@@ -21,8 +21,15 @@ from docstore import (ROOT, documents, latest_verdicts, load_meta,
 STATUS = {
     "found":   ("найдена",      "ok"),
     "absent":  ("не найдена",   "no"),
-    "unclear": ("не проверена", "wait"),
+    "unclear": ("неясно",       "wait"),
+    "pending": ("не проверена", "todo"),
 }
+
+# «Неясно» и «не проверена» — разные итоги, хотя цвет у них один. Первый —
+# вердикт: скан просмотрен, а ответа он не дает (в bv0000632 листы с нужной
+# буквой в скан не попали). Второй — поиск, по которому вердикта нет вовсе.
+# Пока оба звались «не проверена», проверенный до последнего листа том
+# стоял в журнале рядом с нетронутыми.
 
 # Найденная фамилия ещё не значит найденный предок. Могучевыхъ из одной
 # станицы в приказах несколько семей, и зелёный на всех разом обещает
@@ -267,7 +274,7 @@ td.when, td.num { color: var(--dim); font-size: 13px; white-space: nowrap; }
 .badge.maybe { background: var(--maybe-bg); color: var(--maybe-ink); }
 .badge.hit { background: var(--ok-bg); color: var(--ok-ink); }
 .badge.no { background: var(--no-bg); color: var(--no-ink); }
-.badge.wait { background: var(--wait-bg); color: var(--wait-ink); }
+.badge.wait, .badge.todo { background: var(--wait-bg); color: var(--wait-ink); }
 .person { display: inline-block; margin-left: 7px; font-size: 12px;
           font-weight: 600; color: var(--accent); text-decoration: none;
           border-bottom: 1px dotted currentColor; }
@@ -1113,7 +1120,7 @@ def thumb_uri(path: pathlib.Path, max_w=620) -> str:
 
 # Чем меньше, тем важнее показать: за год могло быть два дела, и полоса
 # должна назвать лучший исход, а не последний по алфавиту.
-RANK = {"ok": 0, "maybe": 1, "wait": 2, "no": 3, "gap": 4}
+RANK = {"ok": 0, "maybe": 1, "wait": 2, "todo": 2, "no": 3, "gap": 4}
 
 
 def year_anchor(y: int) -> str:
@@ -1147,7 +1154,7 @@ def year_strip(docs) -> str:
         kin = any(confirmed_pages(r)[1] for r in d["rows"])
         cls = ("ok" if kin else
                "maybe" if "found" in st else
-               "wait" if (not st or "unclear" in st) else "no")
+               "wait" if (not st or st & {"unclear", "pending"}) else "no")
         y = d.get("year")
         if y is None:
             # Год не проставлен: либо книга о нём молчит (альманах,
@@ -1254,7 +1261,7 @@ def collect():
         for r in latest.values():
             v = verdicts.get(r["surname"])
             rows.append({**r,
-                         "status": (v or {}).get("status", "unclear"),
+                         "status": (v or {}).get("status", "pending"),
                          "verdict": (v or {}).get("verdict", ""),
                          "confirmed": (v or {}).get("confirmed"),
                          "kin": (v or {}).get("kin"),
@@ -1272,9 +1279,9 @@ def collect():
 
 
 # Порядок чипов — от «ничего нет» к «нашли и знаем кого»: так же читается
-# и сам поиск. Пузырь «не проверена» появляется, только если такие строки
-# есть: сейчас их нет ни одной, и пустой чип обещал бы несуществующий срез.
-CHIP_ORDER = ("no", "maybe", "ok", "wait")
+# и сам поиск. Пузыри «неясно» и «не проверена» появляются, только если такие
+# строки есть: пустой чип обещал бы несуществующий срез.
+CHIP_ORDER = ("no", "maybe", "ok", "wait", "todo")
 
 
 def status_chips(searches) -> str:
@@ -1322,7 +1329,8 @@ def render(docs) -> str:
     names = {r["surname"].lower() for r in searches}
     found = sum(1 for r in searches if r["status"] == "found")
     absent = sum(1 for r in searches if r["status"] == "absent")
-    todo = sum(1 for r in searches if r["status"] == "unclear")
+    unclear = sum(1 for r in searches if r["status"] == "unclear")
+    todo = sum(1 for r in searches if r["status"] == "pending")
 
     out = ["<!doctype html><html lang=ru><head><meta charset=utf-8>",
            "<meta name=viewport content='width=device-width,initial-scale=1'>",
@@ -1347,6 +1355,7 @@ def render(docs) -> str:
            f"<div class=stat><b>{len(names)}</b><span>фамилий</span></div>",
            f"<div class=stat><b>{found}</b><span>найдено</span></div>",
            f"<div class=stat><b>{absent}</b><span>не найдено</span></div>",
+           f"<div class=stat><b>{unclear}</b><span>неясно</span></div>",
            f"<div class=stat><b>{todo}</b><span>не проверено</span></div>",
            "</div>",
            "</div>",
@@ -1428,7 +1437,7 @@ def render(docs) -> str:
         # разворачиваются по клику. Документов много, и при развёрнутых
         # таблицах главный вопрос к журналу («искали ли это и чем кончилось»)
         # тонет в подробностях проверки.
-        rank = {"found": 0, "unclear": 1, "absent": 2}
+        rank = {"found": 0, "unclear": 1, "pending": 1, "absent": 2}
         chips = []
         for r in sorted(rows, key=lambda r: (rank[r["status"]], r["surname"].lower())):
             label, cls = row_badge(r)

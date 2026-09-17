@@ -38,6 +38,12 @@ STATUS = {
 KIN_LABEL  = "найдена, родство подтверждено"
 MAYBE_LABEL = "найдена, родство не установлено"
 
+SITE_URL = "https://sacret.github.io/genealogy/"
+SITE_TITLE = "Журнал генеалогических поисков"
+SITE_DESCRIPTION = ("Дореволюционные документы: какие фамилии по каким "
+                    "делам уже проверены.")
+SOCIAL_IMAGE_URL = SITE_URL + "social-card.png"
+
 # Подтверждённое родство — это всегда чей-то предок поимённо, и журнал
 # называет его и уводит на страницу родословной (persons.json). Иначе
 # зелёная строка сообщает только «кто-то из семьи», а вопрос «кто именно
@@ -78,9 +84,9 @@ body {
 .wrap { max-width: 1000px; margin: 0 auto; }
 h1 { font-size: 26px; font-weight: 600; margin: 0 0 4px; letter-spacing: -.01em;
      display: flex; align-items: center; gap: 11px; }
-/* Ять нарисован со скруглением и полем внутри самой картинки (icon.py),
-   поэтому здесь ни рамки, ни радиуса не нужно. Кегль в два раза больше
-   показанного — иначе на retina засечки мылятся. */
+/* Ять сохранён со скруглением и полем внутри favicon.ico,
+   поэтому здесь ни рамки, ни радиуса не нужно. В ICO есть размер 64 px,
+   чтобы при показе в 32 px на retina засечки не мылились. */
 h1 .mark { width: 32px; height: 32px; flex: none; }
 .sub { color: var(--dim); margin: 0 0 28px; font-size: 14px; }
 
@@ -946,30 +952,20 @@ document.getElementById('totop').addEventListener('click', () => {
 """
 
 
+def _saved_icon() -> str:
+    """Сохранённая иконка как data: URI для автономного journal.html."""
+    data = (ROOT / "favicon.ico").read_bytes()
+    return "data:image/x-icon;base64," + base64.b64encode(data).decode()
+
+
 def _favicon() -> str:
-    """Ять на тёмном поле — см. icon.py. Если модуля нет, обходимся без."""
-    try:
-        import icon
-        return icon.data_uri()
-    except Exception:
-        return ""
+    """Ять на тёмном поле для вкладки браузера."""
+    return _saved_icon()
 
 
-def _mark(px=64) -> str:
-    """Ять для заголовка — отдельно от favicon.
-
-    Favicon отдаётся как .ico из трёх мелких размеров: в 16 px у ятя
-    слипаются засечки, и icon.py рисует для него особый, упрощённый
-    вариант. В заголовке места вдвое больше, поэтому берём обычную
-    отрисовку крупным кеглем и отдаём PNG.
-    """
-    try:
-        import icon
-        buf = io.BytesIO()
-        icon.render(px).save(buf, "PNG", optimize=True)
-        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
-    except Exception:
-        return ""
+def _mark() -> str:
+    """Та же сохранённая иконка для знака в заголовке."""
+    return _saved_icon()
 
 
 def e(s):
@@ -1507,7 +1503,27 @@ def render(docs) -> str:
 
     out = ["<!doctype html><html lang=ru><head><meta charset=utf-8>",
            "<meta name=viewport content='width=device-width,initial-scale=1'>",
-           "<title>Журнал поисков</title>",
+           f"<title>{SITE_TITLE}</title>",
+           f"<meta name=description content='{SITE_DESCRIPTION}'>",
+           f"<link rel=canonical href='{SITE_URL}'>",
+           "<meta property='og:locale' content='ru_RU'>",
+           "<meta property='og:type' content='website'>",
+           f"<meta property='og:site_name' content='{SITE_TITLE}'>",
+           f"<meta property='og:title' content='{SITE_TITLE}'>",
+           f"<meta property='og:description' content='{SITE_DESCRIPTION}'>",
+           f"<meta property='og:url' content='{SITE_URL}'>",
+           f"<meta property='og:image' content='{SOCIAL_IMAGE_URL}'>",
+           "<meta property='og:image:type' content='image/png'>",
+           "<meta property='og:image:width' content='1734'>",
+           "<meta property='og:image:height' content='907'>",
+           "<meta property='og:image:alt' content='Старинные книги, архивные "
+           "листы и лупа на светлом столе'>",
+           "<meta name=twitter:card content='summary_large_image'>",
+           f"<meta name=twitter:title content='{SITE_TITLE}'>",
+           f"<meta name=twitter:description content='{SITE_DESCRIPTION}'>",
+           f"<meta name=twitter:image content='{SOCIAL_IMAGE_URL}'>",
+           "<meta name=twitter:image:alt content='Старинные книги, архивные "
+           "листы и лупа на светлом столе'>",
            f"<link rel='icon' href='{_favicon()}'>",
            f"<style>{CSS}</style></head><body>",
            "<div class=wrap>",
@@ -1520,8 +1536,7 @@ def render(docs) -> str:
            "<div class=barmain>",
            "<h1>" + (f"<img class=mark alt='' src='{mark}'>" if mark else "")
            + "<span class=name>Журнал поисков</span></h1>",
-           "<p class=sub>Дореволюционные документы: какие фамилии по каким "
-           "делам уже проверены.</p>",
+           f"<p class=sub>{SITE_DESCRIPTION}</p>",
            "<div class=stats>",
            f"<div class=stat><b>{len(docs)}</b><span>документов</span></div>",
            f"<div class=stat><b>{len(searches)}</b><span>поисков</span></div>",

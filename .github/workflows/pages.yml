@@ -1,10 +1,8 @@
 # Публикация журнала на GitHub Pages -> https://sacret.github.io/genealogy/
 #
-# Сайт НЕ пересобирается здесь: journal.html берётся готовым из репозитория.
-# Причина в иконке — icon.py рисует ять шрифтом Georgia Bold из
-# /System/Library/Fonts, которого на ubuntu-раннере нет. Сборка в CI прошла бы
-# без ошибки (журнал ловит исключение и обходится без иконки), но тихо отдала
-# бы страницу без знака в заголовке и без favicon.
+# Сайт здесь не пересобирается: journal.html — готовое, проверяемое локально
+# представление, которое берётся из репозитория. Иконка не зависит от среды:
+# journal.py встраивает сохранённый favicon.ico и в заголовок, и как favicon.
 #
 # Значит journal.html надо коммитить после поисков — он пересобирается сам
 # при каждом вызове find.py, достаточно не забыть про git add.
@@ -18,6 +16,7 @@ on:
     paths:
       - journal.html
       - favicon.ico
+      - social-card.png
       - "*/crops/**"
       - "*/scans/**"
       - .github/workflows/pages.yml
@@ -47,7 +46,7 @@ jobs:
           set -eu
           mkdir -p site
           cp journal.html site/index.html
-          [ -f favicon.ico ] && cp favicon.ico site/ || true
+          cp favicon.ico social-card.png site/
           # Рядом с журналом выкладывается ровно то, на что он ссылается:
           # вырезки («полный размер») и страницы находок («страница целиком»).
           # Вырезки вшиты в саму страницу как data:URI, но ужатыми до 620 px,

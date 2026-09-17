@@ -65,13 +65,14 @@ def main():
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
-           + years_suite() + compact_suite() + chips_suite() + persons_suite() + doclinks_suite()
+           + years_suite() + compact_suite() + social_suite() + chips_suite()
+           + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
            + events_suite() + corpus_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
-             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6
+             + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
              + 9 + 10 + 10 + 7)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
@@ -593,6 +594,42 @@ def compact_suite():
          in render({"a": empty, "d": _doc(1912, "absent")})),
         ("последний список закрыт", "</ul></div>\n</div>\n<footer>" in html),
         ("фильтр видит поиск", "data-s='no'></span></li>" in html),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+    return bad
+
+
+def social_suite():
+    """Превью ссылки содержит полный OG- и Twitter-набор."""
+    bad = 0
+    print("\nпревью для соцсетей:")
+    page = render({})
+    title = "Журнал генеалогических поисков"
+    description = ("Дореволюционные документы: какие фамилии по каким "
+                   "делам уже проверены.")
+    image = "https://sacret.github.io/genealogy/social-card.png"
+    checks = [
+        ("title", f"<title>{title}</title>" in page),
+        ("description", f"<meta name=description content='{description}'>" in page),
+        ("canonical", "<link rel=canonical href='https://sacret.github.io/genealogy/'>" in page),
+        ("OG locale и type", "property='og:locale' content='ru_RU'" in page
+         and "property='og:type' content='website'" in page),
+        ("OG site_name", f"property='og:site_name' content='{title}'" in page),
+        ("OG title", f"property='og:title' content='{title}'" in page),
+        ("OG description", f"property='og:description' content='{description}'" in page),
+        ("OG URL", "property='og:url' content='https://sacret.github.io/genealogy/'" in page),
+        ("OG image", f"property='og:image' content='{image}'" in page),
+        ("размер и MIME картинки", "property='og:image:type' content='image/png'" in page
+         and "property='og:image:width' content='1734'" in page
+         and "property='og:image:height' content='907'" in page),
+        ("OG alt", "property='og:image:alt'" in page),
+        ("Twitter large image", "name=twitter:card content='summary_large_image'" in page),
+        ("Twitter title", f"name=twitter:title content='{title}'" in page),
+        ("Twitter description", f"name=twitter:description content='{description}'" in page),
+        ("Twitter image", f"name=twitter:image content='{image}'" in page),
+        ("Twitter alt", "name=twitter:image:alt" in page),
     ]
     for name, ok in checks:
         bad += not ok

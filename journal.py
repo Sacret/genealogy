@@ -486,6 +486,26 @@ a.year:hover { border-color: var(--accent); }
   #lbfull { display: none; }
 }
 .empty { color: var(--dim); }
+
+/* Дела без находок: строка на дело вместо карточки. Название ведёт во
+   вьюер, в скобках — читаемость и объём, то есть чего стоит само «нет».
+   Скобки набраны ровным серым: подкраска по порогам бейджа в строке
+   ничего не объясняла, а цвета в карточке и в списке значили разное. */
+.nils { margin: 0 0 34px; }
+.nil-head { margin: 0 0 4px; color: var(--dim); font-size: 11.5px;
+            font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.nils ul { margin: 0; padding: 0; list-style: none; }
+.nil-doc { font-size: 14px; line-height: 1.45; padding: 3px 6px; margin: 0 -6px;
+           border-radius: 6px;
+           scroll-margin-top: calc(var(--stuck-h, 0px) + 16px); }
+.nil-doc a { color: var(--ink); text-decoration: none;
+             border-bottom: 1px solid var(--line); }
+.nil-doc a:hover { border-bottom-color: var(--accent); }
+.nil-doc .nil-meta { color: var(--dim); font-size: 13px; white-space: nowrap; }
+/* Сюда ведут ссылки из вердиктов соседних дел: строка мелкая, и без
+   подсветки глаз её не находит. */
+.nil-doc:target { background: var(--wait-bg); }
+.nil-doc.hidden, .nils.hidden { display: none; }
 footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
          border-top: 1px solid var(--line); padding-top: 14px; }
 
@@ -535,7 +555,9 @@ function apply() {
   // первое же нажатие обнулило бы соседние чипы и отжать их было бы не по
   // чему.
   const tally = {};
-  document.querySelectorAll('tbody tr').forEach(tr => {
+  // Строка поиска — это и `tr` в карточке, и невидимый `span` в строке
+  // дела без находок: у обоих `data-k` и `data-s`, считаются они одинаково.
+  document.querySelectorAll('[data-k]').forEach(tr => {
     const hit = !q || tr.dataset.k.includes(q);
     if (hit) tally[tr.dataset.s] = (tally[tr.dataset.s] || 0) + 1;
     const hide = !hit || (on.length && !on.includes(tr.dataset.s));
@@ -555,10 +577,15 @@ function apply() {
   let docs = 0;
   document.querySelectorAll('.year-block').forEach(b => {
     let left = 0;
-    b.querySelectorAll('.doc').forEach(d => {
-      const any = !active || d.querySelectorAll('tbody tr:not(.hidden)').length;
+    b.querySelectorAll('.doc, .nil-doc').forEach(d => {
+      const any = !active || d.querySelectorAll('[data-k]:not(.hidden)').length;
       d.style.display = any ? '' : 'none';
       if (any) { left++; docs++; }
+    });
+    // Подпись «ничего не найдено» гаснет вместе с последней строкой списка.
+    b.querySelectorAll('.nils').forEach(n => {
+      n.classList.toggle('hidden',
+        !n.querySelector('.nil-doc:not([style*="none"])'));
     });
     const tag = b.querySelector('.year-tag');
     if (tag) tag.classList.toggle('off', !left);
@@ -1341,6 +1368,26 @@ def coverage(ident):
             "rescued": len(weak & rescued)}
 
 
+def readability(cov):
+    """Доля надёжно распознанных страниц и цвет её бейджа; None — не мерили."""
+    if not cov or not cov["total"]:
+        return None
+    pct = (cov["total"] - cov["weak"]) / cov["total"]
+    return pct, ("ok" if pct >= 0.85 else "wait" if pct >= 0.6 else "no")
+
+
+# Дела, где по всем фамилиям «не найдена», печатаются строкой списка, а не
+# карточкой. Таких в журнале подавляющее большинство — 658 из 716 к
+# сентябрю 2026-го, — и карточки с одинаковым серым итогом хоронили под
+# собой те немногие, где что-то нашлось. Свёртка — только представление:
+# collect() собирает для них всё то же, и вернуть карточки — поставить False.
+COMPACT_ABSENT = True
+
+
+def all_absent(d) -> bool:
+    return bool(d["rows"]) and all(r["status"] == "absent" for r in d["rows"])
+
+
 def collect():
     """Документы -> список поисков с приклеенным последним вердиктом."""
     docs = OrderedDict()
@@ -1423,6 +1470,32 @@ def status_chips(searches) -> str:
     return "".join(out)
 
 
+def nil_item(ident, d) -> str:
+    """Дело без находок одной строкой: название-ссылка, читаемость, страницы.
+
+    Под строкой лежат невидимые метки поисков — те же `data-k`/`data-s`,
+    что у строк таблицы в карточке, — чтобы фильтр по фамилии и чипы
+    считали такие дела наравне с остальными.
+    """
+    meta = d["meta"]
+    title, url = meta.get("title") or ident, meta.get("url", "")
+    name = (f"<a href='{e(url)}/view/' target=_blank>{e(title)}</a>"
+            if url else e(title))
+    bits = []
+    read = readability(d.get("coverage"))
+    if read:
+        bits.append(f"читаемо {read[0]:.0%}")
+    else:
+        bits.append("читаемость не измерена")
+    if meta.get("pages"):
+        bits.append(f"{meta['pages']} стр.")
+    tags = "".join(
+        f"<span hidden data-k='{e(' '.join([r['surname'], title, ident]).lower())}'"
+        f" data-s='{row_badge(r)[1]}'></span>" for r in d["rows"])
+    return (f"<li class=nil-doc id='{e(ident)}'>{name} "
+            f"<span class=nil-meta>({', '.join(bits)})</span>{tags}</li>")
+
+
 def render(docs) -> str:
     mark = _mark()
     searches = [r for d in docs.values() for r in d["rows"]]
@@ -1479,11 +1552,28 @@ def render(docs) -> str:
     # что пачка у них одна, к ней и ведёт пузырь «без года».
     # Якорь стоит снаружи блока нарочно: фильтр по фамилии прячет и дела, и
     # метку, а ссылка из полосы лет должна вести куда-то и тогда.
-    seen_year, open_block = object(), False
+    # Внутри года карточки идут раньше списка «Ничего не найдено»: в 1911-м
+    # за три сотни пустых выпусков иначе уходили бы редкие находки.
+    # Сортировка устойчивая, так что годы и порядок дел внутри каждой из
+    # двух групп остаются прежними.
+    if COMPACT_ABSENT:
+        years = {}
+        for d in docs.values():
+            years.setdefault(d.get("year"), len(years))
+        docs = OrderedDict(sorted(
+            docs.items(),
+            key=lambda kv: (years[kv[1].get("year")], all_absent(kv[1]))))
+    seen_year, open_block, open_nils = object(), False, False
     for ident, d in docs.items():
         meta, rows = d["meta"], d["rows"]
         title = meta.get("title") or ident
         url = meta.get("url", "")
+        compact = COMPACT_ABSENT and all_absent(d)
+        # Пустые дела стоят в конце своего года, так что список один на год
+        # и закрывается сменой года.
+        if open_nils and (not compact or d.get("year") != seen_year):
+            out.append("</ul></div>")
+            open_nils = False
         if d.get("year") != seen_year:
             if open_block:
                 out.append("</div>")
@@ -1498,6 +1588,13 @@ def render(docs) -> str:
             # верху окна именно он, а сама метка растянута на блок.
             out.append("<div class=year-tag aria-hidden=true>"
                        f"<span>{label}</span></div>")
+        if compact:
+            if not open_nils:
+                out.append("<div class=nils><p class=nil-head>Ничего не "
+                           "найдено</p><ul>")
+                open_nils = True
+            out.append(nil_item(ident, d))
+            continue
         out.append(f"<section class=doc id='{e(ident)}'>")
         out.append(f"<h2>{e(title)}</h2>")
         bits = [f"<code>{e(ident)}</code>"]
@@ -1512,10 +1609,9 @@ def render(docs) -> str:
         out.append(f"<div class=meta>{' · '.join(bits)}</div>")
 
         cov = d.get("coverage")
-        if cov and cov["total"]:
+        if readability(cov):
+            pct, cls = readability(cov)
             ok = cov["total"] - cov["weak"]
-            pct = ok / cov["total"]
-            cls = "ok" if pct >= 0.85 else ("wait" if pct >= 0.6 else "no")
             out.append(
                 "<div class=cov><span class='badge " + cls + "'>"
                 + f"читаемо {pct:.0%}</span> {ok} стр. распознаны надёжно, "
@@ -1610,6 +1706,8 @@ def render(docs) -> str:
             out.append("</tr>")
         out.append("</tbody></table></details></section>")
 
+    if open_nils:
+        out.append("</ul></div>")
     if open_block:
         out.append("</div>")
     out.append("<footer>Пересобирается автоматически при каждом поиске. "

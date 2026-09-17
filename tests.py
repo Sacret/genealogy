@@ -64,7 +64,7 @@ def main():
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
-           + years_suite() + chips_suite() + persons_suite() + doclinks_suite()
+           + years_suite() + compact_suite() + chips_suite() + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
@@ -468,6 +468,54 @@ CASES_YEARS = [
 ]
 
 
+def compact_suite():
+    """Дела, где ничего не найдено, — строкой списка, а не карточкой.
+
+    Таких сотни, и карточки с одинаковым серым итогом прятали те немногие,
+    где что-то нашлось. Строка при этом остаётся целью ссылок из вердиктов
+    и видна фильтру.
+    """
+    bad = 0
+    print("\nдела без находок:")
+    empty = {**_doc(1911, "absent"),
+             "meta": {"title": "Ведомости № 1", "url": "https://x/item/1",
+                      "pages": 4},
+             "coverage": {"total": 4, "weak": 2, "rescued": 2}}
+    two = {**empty, "meta": {**empty["meta"], "title": "Ведомости № 2"},
+           "coverage": None}
+    mixed = _doc(1911, "found")
+    mixed["rows"].append({**mixed["rows"][0], "surname": "Кармазинъ",
+                          "status": "absent"})
+    html = render({"a": empty, "b": two, "c": mixed, "d": _doc(1912, "absent")})
+    checks = [
+        ("пустое дело — не карточка", "<section class=doc id='a'>" not in html),
+        ("а строка с якорем", "<li class=nil-doc id='a'>" in html),
+        ("название — ссылка во вьюер",
+         "<a href='https://x/item/1/view/' target=_blank>Ведомости № 1</a>"
+         in html),
+        ("читаемость и страницы в скобках",
+         "(читаемо 50%, 4 стр.)" in html),
+        ("без замера так и сказано", "(читаемость не измерена, 4 стр.)" in html),
+        ("подряд идущие — один список",
+         html.count("<div class=nils>") == 2
+         and html.index("id='a'") < html.index("id='b'")
+         < html.index("</ul></div>")),
+        ("дело с находкой — карточка", "<section class=doc id='c'>" in html),
+        ("карточка года — раньше списка",
+         html.index("<section class=doc id='c'>")
+         < html.index("<div class=nils>")),
+        ("список года закрыт до следующего",
+         "</ul></div>\n</div>\n<div class=year-mark id='g1912'>"
+         in render({"a": empty, "d": _doc(1912, "absent")})),
+        ("последний список закрыт", "</ul></div>\n</div>\n<footer>" in html),
+        ("фильтр видит поиск", "data-s='no'></span></li>" in html),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+    return bad
+
+
 def chips_suite():
     """Фильтр по итогу: пузыри и метка статуса на строке.
 
@@ -524,7 +572,9 @@ def years_suite():
     # висеть над пустотой. На широком экране блок задаёт метке границы: она
     # едет с прокруткой до последнего дела своего года. Якорь для ссылки из
     # полосы — снаружи блока, и потому переживает фильтр.
-    html = render({"a": _doc(1873, "absent"), "b": _doc(1874, "absent"),
+    # Дела здесь с находками: пустые печатаются строкой списка, а не
+    # карточкой, и у них своя проверка — compact_suite.
+    html = render({"a": _doc(1873, "found"), "b": _doc(1874, "found"),
                    "c": _doc(1874, "found")})
     checks = [
         ("блок на каждый год", html.count("<div class=year-block>") == 2),
@@ -553,8 +603,8 @@ def years_suite():
     # Дела без года идут последними и подряд: пачка у них одна, и якорь с
     # надписью ставятся один раз, иначе ссылка из полосы вела бы в середину
     # пачки.
-    html = render({"a": _doc(1873, "absent"), "b": _doc(None, "absent"),
-                   "c": _doc(None, "absent")})
+    html = render({"a": _doc(1873, "found"), "b": _doc(None, "found"),
+                   "c": _doc(None, "found")})
     checks = [
         ("якорь без года один", html.count("id='no-year'") == 1),
         ("якорь перед первым делом без года",

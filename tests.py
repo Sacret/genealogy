@@ -834,7 +834,10 @@ def boxes_suite():
     # Та же вырезка, но чужая страница: совпадения быть не должно. Это и
     # есть главная проверка — «похоже» здесь не годится, а `locate` ищет
     # точное вхождение пиксель в пиксель.
-    other = boxes.locate(ROOT / ident / "scans" / "p0048.jpg", crop)
+    # Страница должна храниться в Git: локальный кэш сканов богаче чистого
+    # checkout, и прежняя p0048.jpg делала тест зелёным только на рабочей
+    # машине. p0599.jpg — другая подтверждённая находка того же тома.
+    other = boxes.locate(ROOT / ident / "scans" / "p0599.jpg", crop)
 
     place = shot_page(ident, crop)
     gone = shot_page(ident, ROOT / ident / "crops" / "p0598_багрлмов_1.png")

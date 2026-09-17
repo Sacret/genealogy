@@ -8,7 +8,7 @@ from journal import markup, render, shot_page, year_strip
 from docstore import BIG_SCAN_PIXELS, ROOT, allow_big_scans
 import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
-from find import bare_old_spelling, kin_persons
+from find import bare_old_spelling, corpus_documents, kin_persons, year_range
 from events import next_event_id, validate_event
 from surnamefind.search import find_in_text, stem_query
 
@@ -68,11 +68,11 @@ def main():
            + years_suite() + compact_suite() + chips_suite() + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
-           + events_suite())
+           + events_suite() + corpus_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6
-             + 9 + 10 + 8)
+             + 9 + 10 + 8 + 7)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -111,6 +111,40 @@ def events_suite():
         ok = got == expected
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label} -> {got}")
+    return bad
+
+
+def corpus_suite():
+    print("\nглобальный поиск:")
+    bad = 0
+    for label, spec, expected in [
+            ("один год", "1912", (1912, 1912)),
+            ("диапазон", "1900:1912", (1900, 1912)),
+            ("без фильтра", None, None)]:
+        got = year_range(spec)
+        ok = got == expected
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label} -> {got}")
+    for label, spec in [("неверный год", "191x"),
+                        ("обратный диапазон", "1912:1900")]:
+        try:
+            year_range(spec)
+            ok = False
+        except ValueError:
+            ok = True
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+
+    # Реальные метаданные одновременно проверяют фильтр года, заголовка и
+    # наличие OCR, не заставляя тест перечитывать весь корпус.
+    got = corpus_documents(["bv0000404", "pn0024347"], (1894, 1894))
+    ok = [ident for ident, _, _ in got] == ["bv0000404"]
+    bad += not ok
+    print(f"  [{'ok ' if ok else 'FAIL'}] фильтр года")
+    got = corpus_documents(["bv0000404", "pn0024347"], title="ведомости")
+    ok = [ident for ident, _, _ in got] == ["pn0024347"]
+    bad += not ok
+    print(f"  [{'ok ' if ok else 'FAIL'}] фильтр заголовка")
     return bad
 
 

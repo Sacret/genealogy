@@ -2,6 +2,7 @@
 """Поиск фамилии в распознанном документе.
 
     python3 find.py bv0000407 Кармазинъ
+    python3 find.py --all Кармазинъ --year 1900:1912
     python3 find.py bv0000407 Кармазинъ --loose      # шире сеть, больше мусора
     python3 find.py bv0000407 --history              # что уже искали
 """
@@ -14,8 +15,8 @@ import sys
 import catalog
 import journal
 import prune
-from docstore import (add_verdict, doc_dir, load_meta, log_search,
-                      persons as doc_persons, print_log)
+from docstore import (add_verdict, doc_dir, documents, load_meta, log_search,
+                      meta_year, persons as doc_persons, print_log)
 from surnamefind.search import find_in_pages, stem_query
 from surnamefind.match import default_threshold
 
@@ -151,10 +152,66 @@ def page_no(name: str) -> str:
     return name.replace(".txt", "").lstrip("p").lstrip("0") or "0"
 
 
+def year_range(spec):
+    """Год или включительный диапазон ``1900:1912``."""
+    if not spec:
+        return None
+    match = re.fullmatch(r"(\d{4})(?::(\d{4}))?", spec)
+    if not match:
+        raise ValueError("год задаётся как 1912 или диапазон 1900:1912")
+    first = int(match.group(1))
+    last = int(match.group(2) or first)
+    if first > last:
+        raise ValueError("начало диапазона лет позже конца")
+    return first, last
+
+
+def corpus_documents(idents, years=None, title=None):
+    """Документы с OCR, прошедшие фильтры глобального поиска."""
+    title = (title or "").casefold()
+    out = []
+    for ident in idents:
+        meta = load_meta(ident)
+        year = meta_year(meta)
+        if years and (year is None or not years[0] <= year <= years[1]):
+            continue
+        if title and title not in meta.get("title", "").casefold():
+            continue
+        if not (doc_dir(ident) / "ocr").exists():
+            continue
+        out.append((ident, meta, year))
+    return out
+
+
+def search_all(surname, docs, threshold=None, min_fragment=4, limit=200):
+    """Ищет фамилию во всём корпусе, не записывая служебные поиски в журнал."""
+    found = []
+    truncated = False
+    for ident, meta, year in docs:
+        hits = find_in_pages(load_pages(ident), surname, threshold=threshold,
+                             min_fragment=min_fragment)
+        for hit in hits:
+            if len(found) >= limit:
+                truncated = True
+                break
+            found.append({"document": ident, "title": meta.get("title", ""),
+                          "year": year, **hit.__dict__})
+        if truncated:
+            break
+    return found, truncated
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("ident", help="идентификатор документа, напр. bv0000407")
+    ap.add_argument("ident", nargs="?", help="идентификатор документа, напр. bv0000407")
     ap.add_argument("surname", nargs="?")
+    ap.add_argument("--all", action="store_true", dest="all_documents",
+                    help="искать фамилию во всех распознанных документах; "
+                         "поиск не записывается в исследовательский журнал")
+    ap.add_argument("--year", help="фильтр года: 1912 или 1900:1912")
+    ap.add_argument("--title", help="оставить документы с фрагментом в заголовке")
+    ap.add_argument("--limit", type=int, default=200,
+                    help="не больше стольких кандидатов в общей выдаче")
     ap.add_argument("--history", action="store_true", help="журнал поисков по документу")
     ap.add_argument("--loose", action="store_true", help="+1.0 к порогу")
     ap.add_argument("--strict", action="store_true", help="только точное совпадение основы")
@@ -179,6 +236,55 @@ def main():
                                      "--kin сразу, или поимённо по страницам "
                                      "через запятую: '197=i0010,217=i0026'")
     a = ap.parse_args()
+
+    if a.all_documents:
+        # В форме `find.py --all Могучевъ` argparse кладёт единственный
+        # позиционный аргумент в ident; здесь это именно запрос, не документ.
+        surname = a.surname or a.ident
+        if not surname:
+            ap.error("--all требует фамилию")
+        if a.surname:
+            ap.error("после --all нужна одна фамилия, без идентификатора документа")
+        if a.verdict or a.history or a.status or a.pages or a.kin or a.person:
+            ap.error("глобальный поиск не записывает вердикты и историю")
+        if a.limit < 1:
+            ap.error("--limit должен быть положительным")
+        try:
+            years = year_range(a.year)
+        except ValueError as exc:
+            ap.error(str(exc))
+        stem, _ = stem_query(surname)
+        threshold = a.threshold
+        if threshold is None:
+            threshold = default_threshold(stem)
+            if a.loose:
+                threshold += 1.0
+            if a.strict:
+                threshold = 0.0
+        docs = corpus_documents(documents(), years, a.title)
+        hits, truncated = search_all(
+            surname, docs, threshold, 2 if a.short else 4, a.limit)
+        if a.json:
+            print(json.dumps(hits, ensure_ascii=False, indent=2))
+            return
+        print(f"корпус: {len(docs)} документов; основа: {stem!r}; "
+              f"кандидатов: {len(hits)}" +
+              (f" (показаны первые {a.limit})" if truncated else ""))
+        current = None
+        for hit in hits:
+            if hit["document"] != current:
+                current = hit["document"]
+                print(f"\n{current} — {hit['title']}")
+            flag = "½ " if hit["partial"] else ("  " if hit["cost"] == 0 else "~ ")
+            print(f"{flag}стр. {page_no(hit['page']):>4}   {hit['raw']!r} "
+                  f"(score {hit['score']})")
+            print(f"       …{hit['context']}…")
+        return
+
+    if not a.ident:
+        ap.error("нужен идентификатор документа или --all ФАМИЛИЯ")
+    if a.year or a.title:
+        ap.error("--year и --title применимы только вместе с --all")
 
     if a.verdict and a.surname:
         # Итог требуется назвать словом. Раньше --status по умолчанию был

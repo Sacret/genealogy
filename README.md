@@ -7,7 +7,7 @@
 ## Установка
 
 Проект требует Python 3.10 или новее (рекомендуемая версия записана в
-`.python-version`), Pillow и Tesseract с русской моделью. На новой машине:
+`.python-version`), Pillow, NumPy и Tesseract с русской моделью. На новой машине:
 
 ```bash
 python3.12 -m venv .venv

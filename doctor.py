@@ -21,6 +21,11 @@ def inspect_environment(run=subprocess.run, which=shutil.which):
         checks.append((True, f"Pillow {PIL.__version__}"))
     except ImportError:
         checks.append((False, "Pillow не установлен: python -m pip install -e ."))
+    try:
+        import numpy
+        checks.append((True, f"NumPy {numpy.__version__}"))
+    except ImportError:
+        checks.append((False, "NumPy не установлен: python -m pip install -e ."))
 
     executable = which("tesseract")
     if not executable:

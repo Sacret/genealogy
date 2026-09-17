@@ -9,6 +9,7 @@ from docstore import BIG_SCAN_PIXELS, ROOT, allow_big_scans
 import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, kin_persons
+from events import next_event_id, validate_event
 from surnamefind.search import find_in_text, stem_query
 
 # (текст, должно ли найтись)
@@ -66,13 +67,51 @@ def main():
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
            + years_suite() + compact_suite() + chips_suite() + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + namesakes_suite()
-           + pamyatnye_suite() + gitignore_suite() + boxes_suite())
+           + pamyatnye_suite() + gitignore_suite() + boxes_suite()
+           + events_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6
-             + 9 + 10)
+             + 9 + 10 + 8)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
+
+
+def events_suite():
+    print("\nструктурированные события:")
+    base = {"id": "e0001", "person": "i0026", "date": "1911-03-27",
+            "type": "election", "description": "Избран в комиссию",
+            "document": "pn0024347", "page": 4,
+            "certainty": "confirmed", "basis": "explicit"}
+    roster = {"i0026": {}}
+    docs = {"pn0024347": {"pages": 4}}
+    cases = [
+        ("правильная запись", base, []),
+        ("неизвестный человек", {**base, "person": "i9999"},
+         ["неизвестная персона i9999"]),
+        ("плохая дата", {**base, "date": "27 марта 1911"},
+         ["date должен иметь вид YYYY, YYYY-MM или YYYY-MM-DD"]),
+        ("страница вне документа", {**base, "page": 5},
+         ["страница 5 за пределами документа"]),
+        ("неизвестный документ", {**base, "document": "bv9999999"},
+         ["неизвестный документ bv9999999"]),
+        ("плохая уверенность", {**base, "certainty": "sure"},
+         ["неизвестная certainty"]),
+    ]
+    bad = 0
+    for label, event, expected in cases:
+        got = validate_event(event, roster, docs)
+        ok = got == expected
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    for label, records, expected in [
+            ("первый номер", [], "e0001"),
+            ("следующий номер", [{"id": "e0012"}], "e0013")]:
+        got = next_event_id(records)
+        ok = got == expected
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label} -> {got}")
+    return bad
 
 
 

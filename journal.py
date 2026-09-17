@@ -512,8 +512,23 @@ a.year:hover { border-color: var(--accent); }
    подсветки глаз её не находит. */
 .nil-doc:target { background: var(--wait-bg); }
 .nil-doc.hidden, .nils.hidden { display: none; }
-footer { color: var(--dim); font-size: 12.5px; margin-top: 40px;
-         border-top: 1px solid var(--line); padding-top: 14px; }
+footer { color: var(--dim); font-size: 13px; margin-top: 48px;
+         border-top: 1px solid var(--line); padding-top: 22px; }
+footer h2 { color: var(--ink); font-size: 17px; font-weight: 600;
+            margin: 0 0 8px; }
+footer p { max-width: 76ch; margin: 0 0 9px; }
+footer .legend { margin: 14px 0 16px; padding: 0; list-style: none;
+                 display: grid; gap: 7px; max-width: 82ch; }
+footer .legend li { display: flex; align-items: baseline; gap: 8px; }
+footer .legend .badge { flex: none; }
+footer a { color: var(--accent); text-decoration: none;
+           border-bottom: 1px dotted currentColor; }
+footer a:hover { border-bottom-style: solid; }
+footer .build { margin-top: 18px; font-size: 12px; }
+@media (max-width: 520px) {
+  footer .legend li { display: block; }
+  footer .legend .badge { margin: 0 4px 3px 0; }
+}
 
 /* Возврат наверх: стоит в углу всегда, не появляется и не прячется по
    прокрутке — кнопка, которая то есть, то нет, заставляет искать себя
@@ -1725,8 +1740,35 @@ def render(docs) -> str:
         out.append("</ul></div>")
     if open_block:
         out.append("</div>")
-    out.append("<footer>Пересобирается автоматически при каждом поиске. "
-               "Источник — <code>&lt;документ&gt;/searches.jsonl</code>.</footer>")
+    out.append(
+        "<footer><section aria-labelledby=about-title>"
+        "<h2 id=about-title>О журнале</h2>"
+        "<p>Это рабочий журнал поиска людей в дореволюционных книгах, "
+        "газетах и официальных изданиях. Каждая строка — проверка одной "
+        "фамилии в одном документе: сначала OCR находит возможные "
+        "совпадения, затем они сверяются со сканом глазами.</p>"
+        "<p>Поэтому «не найдена» означает, что фамилия не обнаружена в "
+        "доступном скане с указанными полнотой и качеством, а не доказывает, "
+        "что человека не существовало или его никогда не упоминали.</p>"
+        "<ul class=legend>"
+        "<li><span class='badge ok'>родство подтверждено</span> источник и "
+        "известные сведения позволяют уверенно установить человека;</li>"
+        "<li><span class='badge maybe'>родство не установлено</span> фамилия "
+        "найдена, но данных для отождествления недостаточно;</li>"
+        "<li><span class='badge no'>не найдена</span> проверка завершена без "
+        "подтверждённого совпадения;</li>"
+        "<li><span class='badge wait'>неясно / не проверена</span> состояние "
+        "скана не позволяет сделать вывод или работа ещё не закончена.</li>"
+        "</ul>"
+        "<p>Совпадения фамилии и места сами по себе не подтверждают родство: "
+        "для этого нужны согласующиеся имена, даты, занятие, адрес или другие "
+        "связи с уже известной <a href='https://family.sacret.ru/'>"
+        "родословной</a>.</p>"
+        "</section>"
+        "<p class=author>Автор проекта — <a href='https://sacret.ru/'>"
+        "Анастасия Абакумова</a>.</p>"
+        "<p class=build>Пересобирается автоматически при каждом поиске. "
+        "Источник — <code>&lt;документ&gt;/searches.jsonl</code>.</p></footer>")
     out.append("</div>")   # .wrap
     out.append(
         "<button id=totop class=totop type=button aria-label='Наверх' "

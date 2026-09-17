@@ -11,7 +11,7 @@ import re
 import sys
 from datetime import datetime, timezone
 
-from docstore import ROOT, load_meta, persons
+from docstore import ROOT, documents, latest_verdicts, load_meta, persons
 
 
 EVENTS = ROOT / "events.jsonl"
@@ -81,6 +81,24 @@ def known_documents(records):
             for r in records if r.get("document")}
 
 
+def linked_findings():
+    """Источники, где вердикт уже связывает страницу с конкретным человеком."""
+    out = set()
+    for ident in documents():
+        for verdict in latest_verdicts(ident).values():
+            for page, person in (verdict.get("persons") or {}).items():
+                out.add((ident, int(page), person))
+    return out
+
+
+def uncovered_findings(records, findings=None):
+    """Персональные находки, для которых ещё нет ни одного события."""
+    findings = linked_findings() if findings is None else set(findings)
+    covered = {(r.get("document"), int(r.get("page", 0)), r.get("person"))
+               for r in records if str(r.get("page", "")).isdigit()}
+    return sorted(findings - covered)
+
+
 def audit(records):
     roster = persons()
     docs = known_documents(records)
@@ -93,6 +111,8 @@ def audit(records):
         if ident in seen:
             errors.append(f"строка {no}: повторный id {ident}")
         seen.add(ident)
+    for document, page, person in uncovered_findings(records):
+        errors.append(f"нет события для {person}: {document}, стр. {page}")
     return errors
 
 

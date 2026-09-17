@@ -9,7 +9,7 @@ from docstore import BIG_SCAN_PIXELS, ROOT, allow_big_scans
 import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, corpus_documents, kin_persons, year_range
-from events import next_event_id, validate_event
+from events import next_event_id, uncovered_findings, validate_event
 from surnamefind.search import find_in_text, stem_query
 
 # (текст, должно ли найтись)
@@ -72,7 +72,7 @@ def main():
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6
-             + 9 + 10 + 8 + 7)
+             + 9 + 10 + 10 + 7)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -111,6 +111,17 @@ def events_suite():
         ok = got == expected
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label} -> {got}")
+    findings = {("bv0000404", 197, "i0010"),
+                ("bv0000404", 217, "i0026")}
+    records = [{"document": "bv0000404", "page": 197, "person": "i0010"}]
+    missing = uncovered_findings(records, findings)
+    for label, ok in [
+            ("покрытая находка не потеряна",
+             ("bv0000404", 197, "i0010") not in missing),
+            ("непокрытая находка названа",
+             missing == [("bv0000404", 217, "i0026")])]:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad
 
 

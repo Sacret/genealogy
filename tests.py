@@ -10,6 +10,8 @@ import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, corpus_documents, kin_persons, year_range
 from events import next_event_id, uncovered_findings, validate_event
+from audit import (validate_box, validate_meta, validate_quality,
+                   validate_verdict)
 from surnamefind.search import find_in_text, stem_query
 
 # (текст, должно ли найтись)
@@ -69,11 +71,11 @@ def main():
            + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
-           + events_suite() + corpus_suite())
+           + events_suite() + corpus_suite() + audit_suite())
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 10 + 10 + 7)
+             + 9 + 10 + 10 + 7 + 12)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -121,6 +123,51 @@ def events_suite():
              ("bv0000404", 197, "i0010") not in missing),
             ("непокрытая находка названа",
              missing == [("bv0000404", 217, "i0026")])]:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def audit_suite():
+    print("\nаудит данных:")
+    meta = {"url": "https://vivaldi.dspl.ru/bv0000001",
+            "title": "Том", "pages": 4, "dpi": 400}
+    quality = {"threshold": 60.0, "pages": {str(n): 61.0 for n in range(1, 5)},
+               "weak": []}
+    verdict = {"date": "2026-09-17T12:00:00+04:00", "surname": "Могучевъ",
+               "status": "found", "verdict": "Найдена", "confirmed": ["2"],
+               "kin": ["2"], "persons": {"2": "i0010"}}
+    box = {"page": 2, "box": [10, 20, 110, 80], "size": [1000, 1500]}
+    cases = [
+        ("правильные метаданные", not validate_meta(meta, "bv0000001")),
+        ("чужой ID в URL",
+         any("URL" in e for e in validate_meta(meta, "bv0000002"))),
+        ("страница kept_pages вне тома",
+         bool(validate_meta({**meta, "kept_pages": [5]}, "bv0000001"))),
+        ("правильная оценка качества", not validate_quality(quality, 4)),
+        ("округлённый порог неоднозначен",
+         not validate_quality({**quality, "pages": {**quality["pages"], "2": 60.0},
+                               "weak": [2]}, 4)),
+        ("слабая страница потеряна",
+         bool(validate_quality({**quality,
+                                "pages": {**quality["pages"], "2": 59.9}}, 4))),
+        ("правильный вердикт",
+         validate_verdict(verdict, 4, {"i0010": {}}) == ([], [])),
+        ("kin вне confirmed",
+         bool(validate_verdict({**verdict, "confirmed": []}, 4,
+                               {"i0010": {}})[0])),
+        ("неизвестная персона",
+         bool(validate_verdict(verdict, 4, {}, current=True)[0])),
+        ("старый status — предупреждение",
+         validate_verdict({k: v for k, v in verdict.items() if k != "status"},
+                          4, {"i0010": {}}, current=False)[0] == []),
+        ("правильная рамка", not validate_box("p0002_могучев_1.png", box, 4)),
+        ("рамка вышла за страницу",
+         bool(validate_box("p0002_могучев_1.png",
+                           {**box, "box": [10, 20, 1001, 80]}, 4))),
+    ]
+    bad = 0
+    for label, ok in cases:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad

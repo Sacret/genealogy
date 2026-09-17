@@ -27,8 +27,8 @@ jobs:
       - name: Проверить окружение
         run: python doctor.py
 
-      - name: Проверить реестр событий
-        run: python events.py check
+      - name: Проверить целостность данных
+        run: python audit.py
 
       - name: Проверить синтаксис
         run: python -m compileall -q *.py surnamefind

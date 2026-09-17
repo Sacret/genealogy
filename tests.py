@@ -10,6 +10,7 @@ import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, corpus_documents, kin_persons, year_range
 from events import next_event_id, uncovered_findings, validate_event
+from eval import evaluate as evaluate_ocr, load_corpus as load_ocr_corpus
 from audit import (validate_box, validate_meta, validate_quality,
                    validate_verdict)
 from surnamefind.search import find_in_text, stem_query
@@ -72,12 +73,51 @@ def main():
            + pagelist_suite() + bigscan_suite() + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
            + events_suite() + corpus_suite() + audit_suite())
+    bad += ocr_eval_suite()
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 10 + 10 + 7 + 12)
+             + 9 + 10 + 10 + 7 + 12 + 5)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
+
+
+def ocr_eval_suite():
+    print("\nэталон OCR:")
+    corpus = load_ocr_corpus()
+    categories = {category for case in corpus["cases"]
+                  for category in case["categories"]}
+    toy = {
+        "version": 1,
+        "cases": [
+            {"id": "positive", "categories": ["test"],
+             "present": ["Кузнецовъ"], "absent": ["Кармазинъ"]},
+            {"id": "negative", "categories": ["test"],
+             "present": [], "absent": ["Могучевъ"]},
+        ],
+    }
+    result = evaluate_ocr(toy, {
+        "positive": "крестьянинъ Кузнецовъ Иванъ",
+        "negative": "казакъ Рогачевъ Петръ",
+    })
+    required = {"clean-book", "table", "newspaper-columns", "italic",
+                "hyphenation", "bleed-through", "negative"}
+    checks = [
+        ("не меньше восьми страниц", len(corpus["cases"]) >= 8),
+        ("не меньше 25 истинных фамилий",
+         sum(len(case["present"]) for case in corpus["cases"]) >= 25),
+        ("покрыты все трудные типы", required <= categories),
+        ("recall считается по истинным фамилиям",
+         result["found"] == result["truth"] == 1),
+        ("ложные кандидаты считаются на страницу",
+         result["false_candidates"] == 1
+         and result["false_candidates_per_page"] == 0.5),
+    ]
+    bad = 0
+    for label, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
 
 
 def events_suite():

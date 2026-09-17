@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "description": "Страницы, вручную вычитанные по сканам для оценки фамильного поиска в OCR",
+  "cases": [
+    {
+      "id": "clean-book-p020",
+      "categories": ["clean-book"],
+      "image": "p020_400.jpg",
+      "present": [
+        "Рыковскій", "Байдалаковъ", "Сагацкій", "Балабинъ", "Малюгинъ",
+        "Зеленковъ", "Павловъ", "Серебряковъ", "Бакбушевъ", "Епифановъ",
+        "Шебановъ", "Криковъ", "Кирѣевъ", "Гурѣевъ", "Гудковъ", "Садчиковъ",
+        "Дьяченковъ", "Бородинъ"
+      ],
+      "absent": ["Могучевъ", "Кармазинъ"],
+      "stored": {},
+      "note": "Прямой набор приказов; прежний единственный эталон"
+    },
+    {
+      "id": "table-hyphen-p0208",
+      "categories": ["table", "italic", "hyphenation"],
+      "image": "../bv0000386/scans/p0208.jpg",
+      "present": ["Могучевъ"],
+      "absent": ["Кармазинъ"],
+      "stored": {
+        "ocr": "../bv0000386/ocr/p0208.txt",
+        "ocr_bands": "../bv0000386/ocr_bands/p0208.txt"
+      },
+      "note": "Могу- / чевъ в узкой колонке; буква е не пропечаталась"
+    },
+    {
+      "id": "newspaper-columns-p0003",
+      "categories": ["newspaper-columns", "list"],
+      "image": "../pn0024160/scans/p0003.jpg",
+      "present": ["Кармазинъ"],
+      "absent": ["Могучевъ"],
+      "stored": {
+        "ocr": "../pn0024160/ocr/p0003.txt",
+        "ocr_bands": "../pn0024160/ocr_bands/p0003.txt",
+        "ocr_cols": "../pn0024160/ocr_cols/p0003.txt"
+      },
+      "note": "Газетный список в колонках; основной проход фамилию теряет"
+    },
+    {
+      "id": "italic-p0494",
+      "categories": ["italic", "book"],
+      "image": "../bv0000407/scans/p0494.jpg",
+      "present": ["Могучевъ"],
+      "absent": ["Кармазинъ"],
+      "stored": {
+        "ocr": "../bv0000407/ocr/p0494.txt"
+      },
+      "note": "Фамилия набрана курсивом и распознаётся с искажением"
+    },
+    {
+      "id": "bleed-through-p0392",
+      "categories": ["bleed-through", "faded-paper"],
+      "image": "scans/bv0000390-p0392.jpg",
+      "present": ["Камковъ", "Тихоновъ", "Коропковъ", "Фолинъ", "Полянскій", "Поповъ"],
+      "absent": ["Могучевъ", "Кармазинъ"],
+      "stored": {
+        "ocr": "../bv0000390/ocr/p0392.txt",
+        "ocr_bands": "../bv0000390/ocr_bands/p0392.txt",
+        "ocr_prep": "../bv0000390/ocr_prep/p0392.txt"
+      },
+      "note": "Серый снимок тонкой бумаги с сильным просветом оборота"
+    },
+    {
+      "id": "negative-clean-vs-moguchev",
+      "categories": ["negative", "newspaper-columns"],
+      "image": "../pn0024204/scans/p0001.jpg",
+      "present": ["Кармазинъ"],
+      "absent": ["Могучевъ"],
+      "stored": {
+        "ocr": "../pn0024204/ocr/p0001.txt",
+        "ocr_bands": "../pn0024204/ocr_bands/p0001.txt",
+        "ocr_cols": "../pn0024204/ocr_cols/p0001.txt"
+      },
+      "note": "Слабая газетная полоса: Кармазин есть, Могучева нет"
+    },
+    {
+      "id": "negative-clean-vs-moguchev-2",
+      "categories": ["negative", "newspaper-columns", "legal-notices"],
+      "image": "../pn0024204/scans/p0002.jpg",
+      "present": ["Кармазинъ"],
+      "absent": ["Могучевъ"],
+      "stored": {
+        "ocr": "../pn0024204/ocr/p0002.txt",
+        "ocr_bands": "../pn0024204/ocr_bands/p0002.txt",
+        "ocr_cols": "../pn0024204/ocr_cols/p0002.txt"
+      },
+      "note": "Объявления: Кармазина есть, слова «могут» не должны стать Могучевым"
+    },
+    {
+      "id": "negative-rogachev-p0003",
+      "categories": ["negative", "newspaper-columns", "similar-surname"],
+      "image": "scans/pn0024204-p0003.jpg",
+      "present": [],
+      "absent": ["Могучевъ", "Кармазинъ"],
+      "stored": {
+        "ocr": "../pn0024204/ocr/p0003.txt",
+        "ocr_bands": "../pn0024204/ocr_bands/p0003.txt",
+        "ocr_cols": "../pn0024204/ocr_cols/p0003.txt"
+      },
+      "note": "Могучева нет; Рогачев — трудный ложный кандидат"
+    },
+    {
+      "id": "negative-karmalin-p0002",
+      "categories": ["negative", "newspaper-columns", "similar-surname"],
+      "image": "scans/pn0024194-p0002.jpg",
+      "present": [],
+      "absent": ["Могучевъ", "Кармазинъ"],
+      "stored": {
+        "ocr": "../pn0024194/ocr/p0002.txt",
+        "ocr_bands": "../pn0024194/ocr_bands/p0002.txt",
+        "ocr_cols": "../pn0024194/ocr_cols/p0002.txt"
+      },
+      "note": "Кармазина нет; Кармалин — документально проверенный ложный кандидат"
+    }
+  ]
+}

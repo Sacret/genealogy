@@ -10,6 +10,7 @@ import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
 from find import bare_old_spelling, corpus_documents, kin_persons, year_range
 from events import next_event_id, uncovered_findings, validate_event
+from namesakes import validate_registry
 from eval import evaluate as evaluate_ocr, load_corpus as load_ocr_corpus
 from audit import (validate_box, validate_meta, validate_quality,
                    validate_verdict)
@@ -72,12 +73,12 @@ def main():
            + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
-           + events_suite() + corpus_suite() + audit_suite())
+           + events_suite() + registry_suite() + corpus_suite() + audit_suite())
     bad += ocr_eval_suite()
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 10 + 10 + 7 + 12 + 5)
+             + 9 + 10 + 10 + 7 + 12 + 7 + 5)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -163,6 +164,53 @@ def events_suite():
              ("bv0000404", 197, "i0010") not in missing),
             ("непокрытая находка названа",
              missing == [("bv0000404", 217, "i0026")])]:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def registry_suite():
+    print("\nоднофамильцы и гипотезы:")
+    person = {
+        "name": "Иван Могучев",
+        "mentions": [{"document": "bv0000001", "page": 2,
+                      "date": "1884", "description": "Произведён в урядники"}],
+    }
+    base = {
+        "people": {"u-moguchev-ivan": person, "u-moguchev-ivan-1910": person},
+        "hypotheses": [{"left": "u-moguchev-ivan",
+                        "right": "u-moguchev-ivan-1910",
+                        "relation": "probably_same", "basis": "Имя и станица"}],
+    }
+    roster = {"i0010": {}}
+    docs = {"bv0000001": {"pages": 4}}
+    cases = [
+        ("правильный реестр", base, []),
+        ("неверный временный ID",
+         {**base, "people": {"ivan": person}}, ["ID должен иметь вид"]),
+        ("неизвестный документ",
+         {**base, "people": {"u-moguchev-ivan": {
+             **person, "mentions": [{**person["mentions"][0], "document": "bv9999999"}]}}},
+         ["неизвестный документ"]),
+        ("страница вне документа",
+         {**base, "people": {"u-moguchev-ivan": {
+             **person, "mentions": [{**person["mentions"][0], "page": 5}]}}},
+         ["за пределами документа"]),
+        ("неизвестная связь",
+         {**base, "hypotheses": [{**base["hypotheses"][0], "relation": "maybe"}]},
+         ["неизвестная relation"]),
+        ("неизвестный участник",
+         {**base, "hypotheses": [{**base["hypotheses"][0], "right": "u-missing"}]},
+         ["неизвестный участник"]),
+        ("связь с родословной",
+         {**base, "hypotheses": [{**base["hypotheses"][0], "right": "i0010",
+                                   "relation": "possibly_related"}]}, []),
+    ]
+    bad = 0
+    for label, data, expected in cases:
+        got = validate_registry(data, roster, docs)
+        ok = (not got) if not expected else all(any(part in error for error in got)
+                                                for part in expected)
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad

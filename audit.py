@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 from events import uncovered_findings, validate_event
+from namesakes import validate_registry
 
 
 ROOT = Path(__file__).parent
@@ -339,6 +340,11 @@ def audit_project(root=ROOT):
         if isinstance(person.get("url"), str) and not person["url"].rstrip("/").endswith(pid):
             report.error(people_file, f"URL персоны {pid} не заканчивается её ID")
 
+    namesakes_path = root / "namesakes.json"
+    namesakes_data = read_json(namesakes_path, report) or {}
+    for message in validate_registry(namesakes_data, people, docs):
+        report.error(namesakes_path, message)
+
     # Общие JSON-файлы тоже входят в аудит, даже когда их внутренняя схема
     # свободнее и пока ограничивается объектом верхнего уровня.
     shared = {"places.json": None, "documents.json": None}
@@ -477,9 +483,13 @@ def audit_project(root=ROOT):
     for ident, page, pid in uncovered_findings(events, latest_findings):
         report.error(events_path, f"нет события для {pid}: {ident}, стр. {page}")
 
+    namesakes = namesakes_data.get("people", {})
+    hypotheses = namesakes_data.get("hypotheses", [])
     report.stats = {"documents": len(docs), "catalog": len(catalog_rows),
                     "log_records": log_rows,
-                    "people": len(people), "events": len(events)}
+                    "people": len(people), "events": len(events),
+                    "namesakes": len(namesakes) if isinstance(namesakes, dict) else 0,
+                    "hypotheses": len(hypotheses) if isinstance(hypotheses, list) else 0}
     return report
 
 
@@ -495,7 +505,9 @@ def main(argv=None):
     print("проверено: "
           f"{stats['documents']} документов, {stats['catalog']} записей каталога, "
           f"{stats['log_records']} записей журнала, "
-          f"{stats['people']} персон, {stats['events']} событий")
+          f"{stats['people']} персон, {stats['events']} событий, "
+          f"{stats['namesakes']} однофамильцев, "
+          f"{stats['hypotheses']} гипотез")
     print(f"ошибок: {len(report.errors)}, предупреждений: {len(report.warnings)}")
     return 1 if report.errors or (args.strict and report.warnings) else 0
 

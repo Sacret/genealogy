@@ -15,6 +15,7 @@ import re
 from collections import OrderedDict
 
 import boxes
+import docstore
 from docstore import (ROOT, documents, latest_verdicts, load_meta,
                       meta_year, persons as roster, read_log)
 
@@ -1023,7 +1024,7 @@ def plural(n, one, few, many):
 # оставались простым текстом: подшивка ссылается сама на себя чаще любых
 # книг — объявление печатается трижды, список присяжных продолжается из
 # номера в номер, — и как раз эти цепочки читателю и нужны.
-DOC_ID = re.compile(r"\b(?:bv|ot|pn)\d{7}\b")
+DOC_ID = re.compile(r"\b%s\b" % docstore.DOC_ID.pattern)
 
 QUOTE = re.compile(r"«[^»]*»|'[^']*'")
 

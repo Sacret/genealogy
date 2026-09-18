@@ -15,12 +15,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import docstore
 from events import uncovered_findings, validate_event
 from namesakes import validate_registry
 
 
 ROOT = Path(__file__).parent
-DOC_ID = re.compile(r"^(?:bv|ot|pn)\d{7}$")
+DOC_ID = re.compile(r"^%s$" % docstore.DOC_ID.pattern)
 PERSON_ID = re.compile(r"^i\d{4,}$")
 PAGE_FILE = re.compile(r"^p(\d+)\.(?:txt|jpg)$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}T")
@@ -463,7 +464,8 @@ def audit_project(root=ROOT):
         if data is None:
             continue
         refs = {match.group() for text in strings(data)
-                for match in re.finditer(r"\b(?:bv|ot|pn)\d{7}\b", text)}
+                for match in re.finditer(r"\b%s\b" % docstore.DOC_ID.pattern,
+                                        text)}
         for ident in sorted(refs - known):
             report.error(path, f"ссылка на неизвестный документ {ident}")
 

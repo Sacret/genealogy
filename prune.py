@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 
+import docstore
 from docstore import (ROOT, doc_dir, documents, latest_verdicts, load_meta,
                       meta_year, read_log, save_meta)
 
@@ -31,7 +32,7 @@ from docstore import (ROOT, doc_dir, documents, latest_verdicts, load_meta,
 # Префиксы те же, что у DOC_ID в journal.py: газетный выпуск ссылается
 # на соседний не реже книги, а «pn0024160, стр. 3» без этого удерживало
 # третью полосу ссылающегося выпуска — чужую страницу по чужому номеру.
-CROSS_REF = re.compile(r"(?:bv|ot|pn)\d{7}[^.;]{0,60}?стр\.?\s*[\d/]+", re.I)
+CROSS_REF = re.compile(docstore.DOC_ID.pattern + r"[^.;]{0,60}?стр\.?\s*[\d/]+", re.I)
 PAGE_REF = re.compile(r"стр\.?\s*([\d/]+)", re.I)
 
 

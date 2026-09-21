@@ -9,7 +9,6 @@ HTML здесь — представление, а не хранилище. Ис
 
 import base64
 import html
-import io
 import pathlib
 import re
 from collections import OrderedDict
@@ -228,7 +227,23 @@ h1 .mark { width: 32px; height: 32px; flex: none; }
 @media (max-width: 760px) { .bar.stuck .count { display: none; } }
 @media (max-width: 520px) { .bar.stuck h1 .name { display: none; } }
 
-.doc { margin-bottom: 34px; }
+/* Семь сотен дел на одной странице — это семь сотен вёрсток при
+   открытии, а на экране помещается два-три дела. Браузеру разрешено
+   пропускать то, что за экраном, и держать его высоту по оценке; дойдя
+   до дела, он верстает его по-настоящему и запоминает настоящий размер —
+   за это отвечает `auto` в contain-intrinsic-size.
+
+   Оценка — это рост свёрнутой карточки (137-183 px на сентябрь 2026-го,
+   середина — 156) и строки списка (26-27 px): такими они и стоят, пока
+   таблицу не развернут, а развёрнутую браузер запомнит настоящей.
+   Врать оценке нельзя вдвое: завышенная на две сотни пикселей карточка
+   удлиняла страницу на десять тысяч, и полоса прокрутки обещала журнал
+   в полтора раза длиннее, чем он есть.
+
+   Пропущенное остаётся в DOM: фильтр в шапке считает его наравне с
+   прочим, а поиск браузера по странице (Ctrl+F) находит и раскрывает. */
+.doc { margin-bottom: 34px;
+       content-visibility: auto; contain-intrinsic-size: auto 160px; }
 .doc h2 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
 .doc .meta { color: var(--dim); font-size: 13px; margin-bottom: 8px; }
 .cov { font-size: 12.5px; color: var(--dim); margin-bottom: 12px;
@@ -421,8 +436,17 @@ a.year:hover { border-color: var(--accent); }
 .cropgroup { margin-top: 12px; }
 .crophead { margin-bottom: 2px; }
 .crop { margin-top: 8px; }
-.crop img { display: block; max-width: 100%; border: 1px solid var(--line);
+/* Ширина и высота проставлены в самой картинке, а height: auto
+   возвращает пропорции, когда max-width ужимает её в узком окне. Без
+   размеров подгружаемая вырезка дёргала бы страницу: она приходит
+   позже текста и раздвигает его под курсором. */
+.crop img { display: block; max-width: 100%; height: auto;
+            border: 1px solid var(--line);
             border-radius: 8px; background: #fff; padding: 4px; }
+/* Файла превью рядом не оказалось — журнал унесли от папок или вырезку
+   вычистили. Кнопка, открывающая пустоту, хуже, чем её отсутствие;
+   подпись остаётся и называет недостающий файл. */
+.crop.gone .shot { display: none; }
 .crop .cap { color: var(--dim); font-size: 12px; margin-top: 4px; }
 
 /* Вырезка в строке — скан в натуральную величину, четыреста пикселей по
@@ -502,8 +526,16 @@ a.year:hover { border-color: var(--accent); }
 .nil-head { margin: 0 0 4px; color: var(--dim); font-size: 11.5px;
             font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 .nils ul { margin: 0; padding: 0; list-style: none; }
+/* Строк тут больше семисот, и все одинаковой высоты — одна строка в
+   четырнадцать пунктов, — так что оценка почти точная и прокрутка по
+   ней не врёт. Считать надо саму строку без полей: contain-intrinsic-size
+   задаёт содержимое, а не рамку, и `box-sizing: border-box` на него не
+   распространяется. С полной высотой (27 px вместо 21) поля прибавлялись
+   к оценке ещё раз, и семьсот строк удлиняли страницу на четыре тысячи
+   пикселей. */
 .nil-doc { font-size: 14px; line-height: 1.45; padding: 3px 6px; margin: 0 -6px;
            border-radius: 6px;
+           content-visibility: auto; contain-intrinsic-size: auto 21px;
            scroll-margin-top: calc(var(--stuck-h, 0px) + 16px); }
 .nil-doc a { color: var(--ink); text-decoration: none;
              border-bottom: 1px solid var(--line); }
@@ -865,6 +897,21 @@ function showWhole() {
   hi.src = shot.dataset.page;
 }
 
+// Превью лежит файлом рядом с журналом, а не внутри него. Файла нет —
+// значит журнал унесли от папок или вырезку вычистили. Тогда вместо
+// битой картинки остаётся подпись, и она называет недостающий файл:
+// «картинка не загрузилась» человеку ничего не говорит, имя файла —
+// говорит, где её искать.
+document.querySelectorAll('.crop .shot img').forEach(img => {
+  img.addEventListener('error', () => {
+    const box = img.closest('.crop');
+    box.classList.add('gone');
+    box.querySelector('.cap').textContent =
+      'вырезка — файл ' + box.querySelector('.shot').dataset.full
+      + ', рядом с журналом его нет';
+  });
+});
+
 document.querySelectorAll('.crop .shot').forEach(btn => {
   btn.addEventListener('click', () => {
     shot = btn;
@@ -950,12 +997,32 @@ if (anchorTarget() && 'scrollRestoration' in history) {
 let moved = false;
 ['wheel', 'touchstart', 'keydown'].forEach(t =>
   addEventListener(t, () => { moved = true; }, {once: true, passive: true}));
-function toAnchor() {
+function toAnchor(settle) {
   const el = anchorTarget();
-  if (el) el.scrollIntoView();
+  if (!el) return;
+  el.scrollIntoView();
+  if (!settle) return;
+  // Высота дел за экраном — оценка (content-visibility в стилях), и чем
+  // ниже цель, тем сильнее прокрутка по оценке промахивается. Хуже того,
+  // промах вылезает уже после наведения: дойдя до соседних дел, браузер
+  // верстает их по-настоящему, и цель уезжает из-под глаз. Поэтому
+  // наводимся не один раз, а пока она не перестанет двигаться — но не
+  // дольше двух десятков кадров и только пока человек не тронул страницу
+  // сам: дальше это уже не наведение, а борьба с читающим.
+  let left = 24, at = el.getBoundingClientRect().top;
+  const again = () => {
+    if (moved || !left--) return;
+    const now = el.getBoundingClientRect().top;
+    if (Math.abs(now - at) > 1) {
+      el.scrollIntoView();
+      at = el.getBoundingClientRect().top;
+    }
+    requestAnimationFrame(again);
+  };
+  requestAnimationFrame(again);
 }
-toAnchor();
-addEventListener('load', () => { if (!moved) toAnchor(); });
+toAnchor(true);
+addEventListener('load', () => { if (!moved) toAnchor(true); });
 
 // Наверх — и якорь из адреса долой: иначе перезагрузка унесла бы обратно к
 // делу, от которого только что ушли. Фильтр в параметрах остаётся.
@@ -1211,6 +1278,24 @@ def shot_page(ident: str, f: pathlib.Path):
     return page.relative_to(ROOT), info["box"], info["size"]
 
 
+def thumb_html(f: pathlib.Path, surname: str, page: int) -> str:
+    """Картинка вырезки: превью, если оно сделалось, иначе сама вырезка.
+
+    Вырезка на месте превью тяжелее его в десятки раз — четыреста
+    килобайт против двадцати, — но грузится всё так же по подходу и
+    только своей строкой. Пустое место вместо находки хуже.
+    """
+    alt = f"{e(surname)}, стр. {page}"
+    thumb = thumb_file(f)
+    if thumb:
+        src, w, h = thumb
+        size = f" width={w} height={h}"
+    else:
+        src, size = f.relative_to(ROOT), ""
+    return (f"<img alt='{alt}' src='{e(str(src))}'{size} "
+            f"loading=lazy decoding=async>")
+
+
 def shot_html(ident: str, surname: str, page: int, f: pathlib.Path) -> str:
     """Вырезка в строке журнала: картинка-кнопка и подпись под ней."""
     place = shot_page(ident, f)
@@ -1229,32 +1314,63 @@ def shot_html(ident: str, surname: str, page: int, f: pathlib.Path) -> str:
     return (f"<div class=crop>"
             f"<button class=shot type=button title='{title}' "
             f"data-full='{crop}'{where}>"
-            f"<img alt='{e(surname)}, стр. {page}' src='{thumb_uri(f)}'>"
+            f"{thumb_html(f, surname, page)}"
             f"</button>"
             f"<div class=cap>{cap}</div></div>")
 
 
-def thumb_uri(path: pathlib.Path, max_w=620) -> str:
-    """Вырезка внутрь страницы, data:URI.
+# Превью вырезки — файл рядом с журналом, а не data:URI внутри него.
+# Вшитыми картинками журнал весил 4.2 МБ, и 3.1 из них (73%) — девяносто
+# две вырезки в base64. Тянулись они все разом, включая те, до которых
+# читающий никогда не долистает: половина находок лежит в свёрнутых
+# таблицах, а половина — в годах, куда никто не заходил. Файл браузер
+# берёт по мере подхода (`loading=lazy`), и три мегабайта превращаются в
+# десяток килобайт на ту вырезку, что попала на экран.
+#
+# Цена — журнал, унесённый от своих папок, останется без превью. Вполне
+# автономным он и не был: «полный размер» и «страница целиком» всегда
+# лежали файлами рядом, и лайтбокс на месте подменяет превью файлом из
+# crops/. Теперь от папок зависит и первая картинка — зато остальные
+# девять десятых веса не грузятся вовсе.
+THUMBS = "thumbs"
 
-    Журнал должен открываться сам по себе, без соседних папок: его
-    показывают как результат работы, и картинка, отвалившаяся из-за
-    относительного пути, обесценивает именно ту строку, ради которой
-    всё делалось. Полноразмерный файл остаётся в crops/ и доступен
-    по ссылке рядом.
+
+def thumb_file(path: pathlib.Path, max_w=620):
+    """Превью вырезки: `<документ>/crops/thumbs/<то же имя>`, 620 px.
+
+    Возвращает (путь от корня, ширина, высота) или None, если превью не
+    сделать. Подкаталог, а не соседний файл в crops/: по соседству его
+    подобрали бы чужие обходы — `crops_for` ищет вырезки шаблоном
+    `pNNNN_основа_*.png`, и превью попало бы в журнал второй картинкой.
+
+    Файл пишется на сборке и коммитится вместе с вырезкой: Pages
+    выкладывает рядом с журналом ровно то, на что журнал ссылается, и
+    список этот собирает из самого journal.html.
+
+    Готовое превью не переделывается, пока вырезка его не новее: журнал
+    пересобирается после каждого поиска, а девяносто картинок ужимаются
+    дольше, чем собирается вся остальная страница.
     """
     try:
         from PIL import Image
-        im = Image.open(path)
-        if im.width > max_w:
-            im = im.resize((max_w, round(im.height * max_w / im.width)),
-                           Image.LANCZOS)
-        buf = io.BytesIO()
-        im.convert("L").save(buf, "PNG", optimize=True)
-        data = buf.getvalue()
     except Exception:
-        data = path.read_bytes()
-    return "data:image/png;base64," + base64.b64encode(data).decode()
+        return None
+    dst = path.parent / THUMBS / path.name
+    try:
+        if dst.exists() and dst.stat().st_mtime >= path.stat().st_mtime:
+            with Image.open(dst) as ready:
+                return dst.relative_to(ROOT), ready.width, ready.height
+        with Image.open(path) as src:
+            im = src
+            if im.width > max_w:
+                im = im.resize((max_w, round(im.height * max_w / im.width)),
+                               Image.LANCZOS)
+            im = im.convert("L")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            im.save(dst, "PNG", optimize=True)
+            return dst.relative_to(ROOT), im.width, im.height
+    except Exception:
+        return None
 
 
 # Чем меньше, тем важнее показать: за год могло быть два дела, и полоса

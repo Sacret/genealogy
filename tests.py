@@ -4,7 +4,7 @@
 import re
 import sys
 from catalog import SKIP_BY_ID, build, classify, years_covered
-from journal import markup, render, shot_page, year_strip
+from journal import THUMBS, crops_for, markup, render, shot_page, year_strip
 from docstore import BIG_SCAN_PIXELS, ROOT, allow_big_scans
 import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
@@ -71,14 +71,15 @@ def main():
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
            + years_suite() + compact_suite() + social_suite() + chips_suite()
            + persons_suite() + doclinks_suite()
-           + pagelist_suite() + bigscan_suite() + namesakes_suite()
+           + pagelist_suite() + bigscan_suite() + thumbs_suite()
+           + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
            + events_suite() + registry_suite() + corpus_suite() + audit_suite())
     bad += ocr_eval_suite()
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 10 + 10 + 7 + 12 + 7 + 5)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -934,6 +935,65 @@ def pagelist_suite():
         ("кандидаты не потерялись", ">75</a>" in cell and ">290</a>" in cell),
         ("порядок числовой", cell.index(">99</a>") < cell.index(">104</a>")),
     ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+    return bad
+
+
+# Вырезки вшивались в страницу как data:URI, и журнал весил 4.2 МБ, из
+# которых 3.1 — девяносто две картинки в base64. Тянулись они все разом,
+# хотя почти все лежат в свёрнутых таблицах и в годах, куда никто не
+# заходил. Теперь превью — файл рядом, и браузер берёт его по подходу.
+# Цена ошибки здесь тихая: забытый атрибут или подобранное чужим обходом
+# превью не роняют сборку, а просто выкладывают журнал с пустыми местами
+# на месте находок.
+def thumbs_suite():
+    """Превью вырезок: файл рядом с журналом, а не data:URI внутри него."""
+    from PIL import Image
+    bad = 0
+    print("\nпревью вырезок:")
+    ident, surname, page = "pn0024233", "Кармазинъ", "35"
+    row = {"surname": surname, "status": "found", "date": "2026-01-01",
+           "verdict": "", "confirmed": [page], "kin": [page],
+           "persons": {page: "i0117"},
+           "hits": 9, "pages_with_hits": [page]}
+    html = render({ident: {"meta": {}, "rows": [row],
+                           "coverage": None, "year": 1912}})
+    cell = html.split("<td class=result>")[1].split("</td>")[0]
+    srcs = re.findall(r"<img alt='[^']*' src='([^']+)'", cell)
+    files = [ROOT / src for src in srcs]
+    crop = sorted((ROOT / ident / "crops").glob(f"p00{page}_кармазин_*.png"))[0]
+    thumb = crop.parent / THUMBS / crop.name
+    checks = [
+        ("картинки вырезок — файлы, а не data:URI",
+         bool(srcs) and not any(src.startswith("data:") for src in srcs)),
+        ("и лежат в crops/thumbs/",
+         all(f"/crops/{THUMBS}/" in src for src in srcs)),
+        ("каждая нашлась на диске", all(f.exists() for f in files)),
+        ("грузятся по подходу", cell.count("loading=lazy") == len(srcs)),
+        ("размер проставлен — иначе страница дёрнется под курсором",
+         len(re.findall(r"width=\d+ height=\d+", cell)) == len(srcs)),
+        ("страница не несёт вырезок в себе", "data:image/png" not in html),
+        # Вырезка с газетной полосы бывает в две тысячи пикселей шириной,
+        # и в строку она всё равно не влезает. Узкую (эта — 200 px)
+        # превью не растягивает, но и её облегчает: цвет со скана строке
+        # не нужен, а серый PNG вдвое легче.
+        ("превью не шире строки",
+         thumb.exists() and Image.open(thumb).width <= 620),
+        ("и не тяжелее самой вырезки",
+         thumb.stat().st_size <= crop.stat().st_size),
+        # Вырезки журнал ищет шаблоном `pNNNN_основа_*.png` в самой
+        # crops/: лежи превью там же, оно попало бы в журнал второй
+        # картинкой той же находки.
+        ("превью не принято за вторую вырезку",
+         len(crops_for(ident, surname, [page])) == len(srcs)),
+    ]
+    # Pages выкладывает рядом с журналом ровно то, на что он ссылается, и
+    # список собирает грепом по самому journal.html. Раньше картинки были
+    # внутри страницы, и атрибут src в том грепе не значился.
+    deploy = (ROOT / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
+    checks.append(("деплой забирает и превью", "(href|src|data-page)" in deploy))
     for name, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {name}")

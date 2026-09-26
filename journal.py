@@ -614,7 +614,14 @@ function apply() {
   document.querySelectorAll('[data-k]').forEach(tr => {
     const hit = !q || tr.dataset.k.includes(q);
     if (hit) tally[tr.dataset.s] = (tally[tr.dataset.s] || 0) + 1;
-    const hide = !hit || (on.length && !on.includes(tr.dataset.s));
+    // Фамилия в строке «не найдена» — это то, по чему искали, а не то, что
+    // есть в томе. Пока чип «не найдена» не нажат, такая строка отвечает
+    // только на название, номер дела и страницы: иначе «могучев» показывал
+    // бы все тома, где его искали и не нашли. Нажатый чип возвращает их
+    // намеренно — «где я его уже искал» тоже законный вопрос.
+    const seen = tr.dataset.s === 'no' && !on.includes('no')
+      ? tr.dataset.n.includes(q) : hit;
+    const hide = !seen || (on.length && !on.includes(tr.dataset.s));
     tr.classList.toggle('hidden', hide);
     if (!hide) shown++;
   });
@@ -1619,7 +1626,9 @@ def nil_item(ident, d) -> str:
         bits.append(f"{meta['pages']} стр.")
     tags = "".join(
         f"<span hidden data-k='{e(' '.join([r['surname'], title, ident]).lower())}'"
-        f" data-s='{row_badge(r)[1]}'></span>" for r in d["rows"])
+        f" data-s='{row_badge(r)[1]}'"
+        f" data-n='{e(' '.join([title, ident]).lower())}'></span>"
+        for r in d["rows"])
     return (f"<li class=nil-doc id='{e(ident)}'>{name} "
             f"<span class=nil-meta>({', '.join(bits)})</span>{tags}</li>")
 
@@ -1820,7 +1829,9 @@ def render(docs) -> str:
                 links.append(f"<a{cl} href='{e(url)}/view/?#page={e(p)}' "
                              f"target=_blank>{e(p)}</a>")
             key = " ".join([r["surname"], title, ident, *pages]).lower()
-            out.append(f"<tr data-k='{e(key)}' data-s='{cls}'>")
+            rest = " ".join([title, ident, *pages]).lower()
+            out.append(f"<tr data-k='{e(key)}' data-s='{cls}' "
+                       f"data-n='{e(rest)}'>")
             out.append(f"<td class=when>{e(r['date'][:16].replace('T', ' '))}</td>")
             out.append(f"<td class=surname>{e(r['surname'])}</td>")
             out.append(f"<td class=num data-l='Кандидатов'>{r['hits']}</td>")

@@ -735,7 +735,8 @@ def compact_suite():
          "</ul></div>\n</div>\n<div class=year-mark id='g1912'>"
          in render({"a": empty, "d": _doc(1912, "absent")})),
         ("последний список закрыт", "</ul></div>\n</div>\n<footer>" in html),
-        ("фильтр видит поиск", "data-s='no'></span></li>" in html),
+        ("фильтр видит поиск", re.search(
+            r"data-s='no' data-n='[^']*'></span></li>", html) is not None),
     ]
     for name, ok in checks:
         bad += not ok
@@ -796,7 +797,7 @@ def chips_suite():
         ("пузырь «родство не установлено»", "data-s='maybe'" in html),
         ("пузырь «родство подтверждено»", "data-s='ok'" in html),
         ("итог назван на каждой строке",
-         len(re.findall(r"<tr data-k='[^']*' data-s='\w+'>", html))
+         len(re.findall(r"<tr data-k='[^']*' data-s='\w+' data-n='[^']*'>", html))
          == html.count("<tr data-k=")),
         ("счёт рядом с пузырём", "<span class=n>1</span>" in html),
     ]

@@ -118,6 +118,17 @@ def bare_internal_ids(text: str):
     return sorted(set(re.findall(r"\b[ie]0\d{3}\b", text)))
 
 
+def bare_crop_paths(text: str):
+    """Пути к вырезкам ('crops/p0131_могучев_1.png'), забытые в прозе.
+
+    Журнал сам показывает вырезку рядом с найденной страницей —
+    `crops_for()` находит файл по документу, фамилии и подтверждённым
+    страницам, а не по имени, названному в вердикте. Упоминание пути
+    в прозе читателю ничего не добавляет и выглядит обломком отладки.
+    """
+    return sorted(set(re.findall(r"\bcrops/\S+?\.png", text)))
+
+
 def kin_persons(spec, kin):
     """Разбор --person: кто найден на каждой странице с подтверждённым родством.
 
@@ -318,6 +329,11 @@ def main():
                      + ", ".join(leaked_ids)
                      + "\nчеловек называется по имени, событие — по сути; "
                        "--person и --kin привязывают находку к реестру и без этого")
+        crop_paths = bare_crop_paths(a.verdict)
+        if crop_paths:
+            sys.exit("путь к вырезке в прозе вердикта: " + ", ".join(crop_paths)
+                     + "\nжурнал сам показывает вырезку по --pages, называть "
+                       "файл в тексте незачем")
         pages = re.findall(r"\d+", a.pages) if a.pages else None
         if a.status == "found" and not pages:
             sys.exit("--status found без --pages: назовите страницы находки, "

@@ -305,6 +305,9 @@ td.when, td.num { color: var(--dim); font-size: 13px; white-space: nowrap; }
 .doclink { color: var(--accent); text-decoration: none;
            border-bottom: 1px dotted currentColor; white-space: nowrap; }
 .doclink:hover { border-bottom-style: solid; }
+.place { color: var(--accent); text-decoration: none;
+         border-bottom: 1px dotted currentColor; }
+.place:hover { border-bottom-style: solid; }
 .note { color: var(--dim); font-size: 13px; margin-top: 5px; max-width: 62ch; }
 /* Вердикт длинный, и в нём три разных голоса: мой пересказ, цитата из
    приказа и то, что автор выделил капслоком. Курсив и жирный разводят их
@@ -1118,6 +1121,65 @@ BREAK = re.compile(
     r"|Отклонен|Проверочные поиски|Режим --short|Сверены все|Счёт по)")
 
 
+# Первое упоминание этих мест в вердикте становится ссылкой на страницу
+# family.sacret.ru — остальные вхождения того же места в том же вердикте
+# остаются простым текстом, повторная ссылка на абзац ничего не добавляет.
+# Формы — только падежи самого места, не производные прилагательные
+# («ростовские» Кармазины остаются текстом, а не Ростовом).
+#
+# У большинства томов старая орфография — и первое (иногда единственное)
+# упоминание места может стоять внутри цитаты дореформенным письмом, где
+# «е» в окончании — это «ять» ([[verdict-orthography]] цитаты разрешает).
+# Твёрдый знак сам по себе не мешает: он и в современном алфавите входит
+# в диапазон а-я, а вот «ять» в этот диапазон не входит — суффиксные
+# классы ниже её учитывают отдельно.
+PLACE_LINKS = [
+    (re.compile(r"\b(?:Кочетовская|Кочетовской|Кочетовскую)\b", re.I),
+     "https://family.sacret.ru/places/p0013/"),
+    (re.compile(r"\b(?:Новочеркасск|Новочеркасска|Новочеркасску"
+                r"|Новочеркасске|Новочеркасскѣ)\b", re.I),
+     "https://family.sacret.ru/places/p0000/"),
+    (re.compile(r"\bвоенно-ремесленн[а-яѣі]+\s+школ[а-яѣі]*\b", re.I),
+     "https://family.sacret.ru/places/p0043/"),
+    (re.compile(r"\bвоенно-фельдшерск[а-яѣі]+\s+школ[а-яѣі]*\b", re.I),
+     "https://family.sacret.ru/places/p0044/"),
+    (re.compile(r"\b(?:Ровеньки|Ровеньков|Ровенькам|Ровеньках|Ровеньками)\b", re.I),
+     "https://family.sacret.ru/places/p0027/"),
+    (re.compile(r"\b(?:Ростов-на-Дону|Ростова-на-Дону|Ростове-на-Дону|Ростовѣ-на-Дону"
+                r"|Ростову-на-Дону"
+                r"|Ростов|Ростова|Ростову|Ростовом|Ростовомъ|Ростове|Ростовѣ)\b", re.I),
+     "https://family.sacret.ru/places/p0007/"),
+    (re.compile(r"\b(?:Санкт-Петербург|Санкт-Петербурга|Санкт-Петербургу"
+                r"|Санкт-Петербургом|Санкт-Петербургомъ|Санкт-Петербурге|Санкт-Петербургѣ)\b",
+                re.I),
+     "https://family.sacret.ru/places/p0012/"),
+    (re.compile(r"\b(?:Москва|Москвы|Москве|Москвѣ|Москву|Москвой|Москвою)\b", re.I),
+     "https://family.sacret.ru/places/p0023/"),
+]
+
+# Плейсхолдер ставится до экранирования и разбора цитат/капслока, чтобы
+# само место могло встретиться внутри «ёлочек» или капслочной врезки —
+# и переживает оба прохода: символ вне кириллицы и вне ASCII-разметки,
+# ни QUOTE, ни CAPS, ни html.escape его не трогают.
+PLACE_MARK = ""
+
+
+def place_links(text):
+    """Первое упоминание каждого места из PLACE_LINKS -> плейсхолдер."""
+    marks = {}
+
+    def sub(url):
+        def _sub(m):
+            token = f"{PLACE_MARK}{len(marks)}{PLACE_MARK}"
+            marks[token] = (m.group(), url)
+            return token
+        return _sub
+
+    for pattern, url in PLACE_LINKS:
+        text = pattern.sub(sub(url), text, count=1)
+    return text, marks
+
+
 def markup(text: str, known=(), skip=None) -> str:
     """Текст вердикта -> HTML: цитаты курсивом, капслок жирным, абзацы.
 
@@ -1126,6 +1188,8 @@ def markup(text: str, known=(), skip=None) -> str:
     и молча: лучше оставить номер текстом. `skip` — само это дело, на
     себя ссылаться незачем.
     """
+    text, place_marks = place_links(text)
+
     def link(s):
         """s уже экранирован: подставляем якоря в готовый HTML."""
         return DOC_ID.sub(
@@ -1156,8 +1220,13 @@ def markup(text: str, known=(), skip=None) -> str:
         out.append(link(e(s[pos:])))
         return "".join(out)
 
-    return "".join(f"<p>{inline(p.strip())}</p>"
-                   for p in BREAK.split(text.strip()) if p.strip())
+    out = "".join(f"<p>{inline(p.strip())}</p>"
+                  for p in BREAK.split(text.strip()) if p.strip())
+    for token, (name, url) in place_marks.items():
+        out = out.replace(
+            token,
+            f"<a class=place href='{url}' target=_blank>{e(name)}</a>")
+    return out
 
 
 def _page_key(p):

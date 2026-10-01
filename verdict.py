@@ -115,7 +115,28 @@ def continuation_fits(hit, stem, fragile, limit):
     return prefix_distance(stem, joined, fragile=fragile)[0] <= limit
 
 
-def classify(hit, dismissed, fits=None):
+# Настоящие фамилии, в которые опечатка набора превращает искомую. Обычно
+# это историк Карамзин, но в bv0000032 на стр. 547 книги (скан 370) стоит
+# «Карамзинъ Ф. П., Азовскій баз.» — Кармазин, набранный с перестановкой
+# букв, и его отсеяли как историка. Такое слово с инициалами рядом —
+# человек из списка, а не цитата, и решает его только человек.
+LOOKALIKES = {"кармазин": ("карамзин",)}
+INITIAL = r"[А-ЯЁІѢ][а-яёіѣ]{0,4}\s*[.,’']"
+INITIALS_AFTER = re.compile(r"^\W{0,3}\s*" + INITIAL)
+INITIALS_BEFORE = re.compile(INITIAL + r"\s*$")
+
+
+def initials_near(hit):
+    """Стоят ли инициалы или сокращённое имя сразу до или после слова."""
+    context = getattr(hit, "context", "") or ""
+    at = context.find(hit.raw)
+    if at < 0:
+        return False
+    return bool(INITIALS_AFTER.match(context[at + len(hit.raw):])
+                or INITIALS_BEFORE.search(context[:at]))
+
+
+def classify(hit, dismissed, fits=None, stem=None):
     """(класс, причина): exact | partial | fragment | dismissed | review.
 
     Отсев применяется только к искажённым совпадениям целого слова и к
@@ -129,7 +150,11 @@ def classify(hit, dismissed, fits=None):
         return "partial", None
     if hit.cost == 0:
         return "exact", None
-    reason = dismissed.get(normalize(hit.raw))
+    word = normalize(hit.raw)
+    if (any(word.startswith(w) for w in LOOKALIKES.get(stem, ()))
+            and initials_near(hit)):
+        return "initials", "похожая фамилия с инициалами — возможна опечатка набора"
+    reason = dismissed.get(word)
     if reason:
         return "dismissed", reason
     return "review", None
@@ -198,7 +223,7 @@ def gather(ident, surname, places=DEFAULT_PLACES, dismissed=None, pages=None):
     for h in sorted(seen.values(), key=lambda h: (page_number(h), h.start)):
         fits = (continuation_fits(h, stem, fragile, base + 1.0)
                 if h.partial else None)
-        kind, reason = classify(h, dismissed.get(stem, {}), fits)
+        kind, reason = classify(h, dismissed.get(stem, {}), fits, stem)
         candidates.append({"page": page_number(h), "raw": h.raw, "kind": kind,
                            "reason": reason, "cost": h.cost,
                            "context": h.context})
@@ -252,7 +277,7 @@ def problems(ctx, note=None):
     if not total or ctx["layers"].get("ocr") != total:
         out.append(f"{ident}: основное распознавание неполно "
                    f"({ctx['layers'].get('ocr', 0)} из {total})")
-    risky = [c for c in ctx["candidates"] if c["kind"] in ("exact", "partial")]
+    risky = [c for c in ctx["candidates"] if c["kind"] in ("exact", "partial", "initials")]
     if risky:
         out.append(f"{ident}: точные или оборванные совпадения "
                    f"({', '.join(sorted({c['raw'] for c in risky}))}) — "
@@ -414,7 +439,8 @@ def print_review(ctx):
         print(f"  место «{label}»: {pages_phrase(pages)}"
               + (f" ({words})" if words else ""))
     for c in todo:
-        mark = {"exact": "ТОЧНО", "partial": "ОБРЫВОК"}.get(c["kind"], "")
+        mark = {"exact": "ТОЧНО", "partial": "ОБРЫВОК",
+                "initials": "С ИНИЦИАЛАМИ — ОПЕЧАТКА?"}.get(c["kind"], "")
         print(f"  стр. {c['page']:>3}  {c['raw']!r:18} {mark}")
         print(f"        …{c['context']}…")
         print(f"        скан: {doc_dir(ctx['ident'])}/scans/p{c['page']:04d}.jpg")

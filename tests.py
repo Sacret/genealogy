@@ -1535,6 +1535,21 @@ def verdict_suite():
              verdict.classify(hit(0), {"кармалин": "x"})[0] == "exact"),
             ("обрывок переноса не отсеивается",
              verdict.classify(hit(0.5, True), {"кармалин": "x"})[0] == "partial"),
+            ("«Карамзинъ Ф. П.» не отсеивается даже из списка",
+             verdict.classify(SimpleNamespace(
+                 cost=2.0, partial=False, raw="Карамзинъ",
+                 context="Московская. Карамзинъ Ф. П., Азовскій баз."),
+                 {"карамзин": "историк"}, stem="кармазин")[0] == "initials"),
+            ("«Ф. П. Карамзинъ» тоже с инициалами",
+             verdict.classify(SimpleNamespace(
+                 cost=2.0, partial=False, raw="Карамзинъ",
+                 context="купец Ф. П. Карамзинъ, Азовскій"),
+                 {}, stem="кармазин")[0] == "initials"),
+            ("историк Карамзин без инициалов уходит в обычный разбор",
+             verdict.classify(SimpleNamespace(
+                 cost=2.0, partial=False, raw="Карамзина",
+                 context="по словам историка Карамзина, городокъ"),
+                 {}, stem="кармазин")[0] == "review"),
             ("слово не из списка уходит человеку",
              verdict.classify(hit(2.0), {})[0] == "review"),
             ("в чистом документе всё отсеяно", not verdict.unresolved(ctx)),

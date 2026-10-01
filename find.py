@@ -134,6 +134,21 @@ def bare_crop_paths(text: str):
 
 
 WEAK_WORDS = re.compile(r"слаб|ненадёж|порог", re.I)
+# Номер страницы — только после «стр.», «страница», «полоса»: голое число
+# в газетном вердикте почти всегда дата или номер выпуска («4 августа»,
+# «№ 62»), и у четырёхполосного выпуска оно совпало бы со слабой полосой.
+PAGE_REF = re.compile(r"(?:стр\.?|страниц\w*|полос\w*)\s*"
+                      r"(\d+(?:\s*(?:,|и|[–—-])\s*\d+)*)", re.I)
+
+
+def named_pages(text: str):
+    """Номера страниц, названные в тексте: «стр. 1, 4», «полосы 2–3»."""
+    out = set()
+    for m in PAGE_REF.finditer(text):
+        for a, b in re.findall(r"(\d+)(?:\s*[–—-]\s*(\d+))?", m.group(1)):
+            lo, hi = int(a), int(b or a)
+            out.update(range(lo, hi + 1) if hi - lo < 1000 else (lo, hi))
+    return out
 
 
 def weak_pages_unmentioned(ident: str, text: str):
@@ -142,8 +157,9 @@ def weak_pages_unmentioned(ident: str, text: str):
     Отрицательный ответ имеет силу только там, где распознавание надёжно
     (так вышло с 'Могучевъ' на стр. 208 bv0000386), поэтому вердикт
     «не найдена» по документу со слабыми страницами должен о них сказать:
-    назвать хоть одну страницу или упомянуть порог. Пустой список — можно
-    писать. Все ныне действующие отрицательные вердикты правило проходят.
+    назвать хоть одну страницу («стр. 4») или упомянуть порог. Пустой
+    список — можно писать. Все ныне действующие отрицательные вердикты
+    правило проходят.
     """
     path = doc_dir(ident) / "quality.json"
     if not path.exists():
@@ -151,8 +167,7 @@ def weak_pages_unmentioned(ident: str, text: str):
     weak = json.loads(path.read_text(encoding="utf-8")).get("weak", [])
     if not weak or WEAK_WORDS.search(text):
         return []
-    named = set(re.findall(r"\d+", text))
-    if any(str(p) in named for p in weak):
+    if named_pages(text) & set(weak):
         return []
     return weak
 

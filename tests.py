@@ -91,7 +91,7 @@ def main():
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17 + 16 + 17 + 28)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17 + 16 + 17 + 36)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -1513,7 +1513,17 @@ def verdict_suite():
         make(bad_doc, ["урядникъ Кармазинъ Яковъ", "объявленіе", "стихи"])
         ctx = verdict.gather(ok_doc, "Кармазинъ", dismissed=dismissed)
         bad_ctx = verdict.gather(bad_doc, "Кармазинъ", dismissed=dismissed)
+        make("bv0000903", ["станица въ Мусскомъ округѣ", "Мирскому сходу",
+                           "стихи"])
+        place_ctx = verdict.gather("bv0000903", "Кармазинъ", dismissed=dismissed)
         text = verdict.build_text(ctx)
+
+        def exits(fn, *args):
+            try:
+                fn(*args)
+            except SystemExit:
+                return True
+            return False
         hit = lambda cost, partial=False, raw="Кармалинъ": SimpleNamespace(
             cost=cost, partial=partial, raw=raw)
 
@@ -1544,6 +1554,20 @@ def verdict_suite():
             ("с --note место можно записать",
              verdict.problems({**ctx, "place_hits": {"Ровеньки": [2]}},
                               "стр. 2 — другая Ровеньки") == []),
+            ("искажённое место («Мусскомъ») найдено, шум («Мирскому») нет",
+             place_ctx["place_hits"] == {"Миусский округ": [1]}),
+            ("заметка к документу без неразобранного отклоняется",
+             any("разбирать нечего" in p for p in verdict.problems(ctx, "x"))),
+            ("дореформенное в заметке ловится до записи",
+             any("дореформенное" in p for p in verdict.problems(
+                 {**ctx, "place_hits": {"Ровеньки": [2]}}, "стр. 2 — Ровенекъ"))),
+            ("заметка привязывается к своему документу",
+             verdict.parse_notes([f"{bad_doc}=стр. 1"], [ok_doc, bad_doc])
+             == {bad_doc: "стр. 1"}),
+            ("один документ — заметка без имени",
+             verdict.parse_notes(["стр. 1"], [ok_doc]) == {ok_doc: "стр. 1"}),
+            ("несколько документов — заметка без имени отклоняется",
+             exits(verdict.parse_notes, ["стр. 1"], [ok_doc, bad_doc])),
             ("обрывок с чужим продолжением отсеивается",
              verdict.continuation_fits(
                  SimpleNamespace(raw="Мо-", context="село Мо- рушка, поле"),
@@ -1590,6 +1614,11 @@ def verdict_suite():
              weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА. Стр. 3 — шум.") == []),
             ("упоминание порога снимает замечание",
              weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА, слабые страницы разобраны") == []),
+            ("дата и номер выпуска не считаются названной страницей",
+             weak_pages_unmentioned(
+                 ok_doc, "НЕ НАЙДЕНА. Газета, 3 августа 1885, № 1.") == [1, 3]),
+            ("полосы диапазоном: «полосы 2–3» называет стр. 3",
+             weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА. Полосы 2–3 — шум.") == []),
         ]
     finally:
         docstore.ROOT = old_root

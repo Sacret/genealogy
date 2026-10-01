@@ -4,6 +4,8 @@
     python3 verdict.py draft Кармазинъ pn0026136 pn0026137
     python3 verdict.py accept Кармазинъ pn0026136 pn0026137
     python3 verdict.py accept Кармазинъ pn0026136 --note "стр. 3: «картии» — обрывок слова"
+    python3 verdict.py accept Кармазинъ pn0026136 pn0026137 \\
+        --note pn0026137="стр. 4 — «магазинт»: объявление"
 
 Почти все вердикты в журнале — отрицательные и почти слово в слово
 одинаковые: места не найдены, кандидаты — обычные слова, такие-то полосы
@@ -52,6 +54,11 @@ LAYER_NAMES = {
     "ocr_cols": "колонки",
     "ocr_prep": "бинаризованный скан",
 }
+# Порог для мест. Замер на 38 выпусках «Казачьего вестника» 1885 г.: до 1,0
+# включительно — искажённый «Миусский» («Мусскаго», «Мпусскаго», «Мтусскомъ»,
+# около 40 мест против 5 точных), с 1,3 — уже шум («Мирскому», «Минскь»,
+# «Мускулы»). Полный порог фамилии (1,4–2,0) завалил бы разбор шумом.
+PLACE_THRESHOLD = 1.0
 # Не больше стольких слабых страниц называем поимённо в прозе: у плохой
 # книги их сотни, и список тонет в тексте, а полный лежит в quality.json.
 WEAK_LISTED = 15
@@ -178,16 +185,20 @@ def gather(ident, surname, places=DEFAULT_PLACES, dismissed=None, pages=None):
 
     # Место — слово, а не обломок: 'Рово-' перед переносом совпало бы с
     # «Ровеньки» в любой газете. Обрывок учитывается, только если его
-    # продолжение не опровергает место.
-    place_hits = {}
+    # продолжение не опровергает место. Искажения OCR учитываются так же,
+    # как у фамилии, но с порогом PLACE_THRESHOLD: точный поиск пропускал
+    # «Мусскаго» и «Мпусскаго», и вердикт писал «мест не найдено».
+    place_hits, place_words = {}, {}
     for label, query in places:
         pstem, pfragile = stem_query(query)
-        pages_found = {page_number(h)
-                       for h in find_in_pages(pages, query, threshold=0.0)
-                       if not h.partial
-                       or continuation_fits(h, pstem, pfragile, 1.0) is not False}
-        if pages_found:
-            place_hits[label] = sorted(pages_found)
+        found = [h for h in find_in_pages(pages, query,
+                                          threshold=PLACE_THRESHOLD)
+                 if not h.partial
+                 or continuation_fits(h, pstem, pfragile,
+                                      PLACE_THRESHOLD) is not False]
+        if found:
+            place_hits[label] = sorted({page_number(h) for h in found})
+            place_words[label] = sorted({h.raw for h in found})
 
     quality = load_quality(ident)
     weak = {}
@@ -199,6 +210,7 @@ def gather(ident, surname, places=DEFAULT_PLACES, dismissed=None, pages=None):
         "pages_total": meta.get("pages"), "stem": stem, "threshold": base,
         "counts": counts, "normal_hits": normal_hits, "candidates": candidates,
         "places": [label for label, _ in places], "place_hits": place_hits,
+        "place_words": place_words,
         "layers": layer_counts(ident), "quality": quality, "weak": weak,
     }
 
@@ -224,10 +236,43 @@ def problems(ctx, note=None):
         out.append(f"{ident}: точные или оборванные совпадения "
                    f"({', '.join(sorted({c['raw'] for c in risky}))}) — "
                    "решает человек, вердикт пишется через find.py --verdict")
-    if (unresolved(ctx) or ctx["place_hits"]) and not (note or "").strip():
+    pending = unresolved(ctx) or ctx["place_hits"]
+    if pending and not (note or "").strip():
         out.append(f"{ident}: есть неразобранное (кандидаты или места) — "
                    "разберите глазами и опишите в --note")
+    if (note or "").strip() and not pending:
+        out.append(f"{ident}: разбирать нечего, а --note дан — заметка "
+                   "относится к другому документу?")
+    # Та же проверка, что в record(): здесь она стоит до записи первого
+    # документа, иначе пачка оборвалась бы на середине.
+    stale = find.bare_old_spelling(build_text(ctx, note))
+    if stale:
+        out.append(f"{ident}: дореформенное написание вне кавычек: "
+                   + ", ".join(stale) + " — возьмите в «» или '' в --note")
     return out
+
+
+def parse_notes(specs, idents):
+    """{документ: заметка} из --note; ошибки — sys.exit.
+
+    Разбор у каждого выпуска свой, поэтому при нескольких документах
+    заметка привязывается к документу: `--note pn0026136="стр. 4 — …"`.
+    Общая заметка вписалась бы в вердикт соседа, где такого кандидата нет.
+    """
+    notes = {}
+    for spec in specs or []:
+        ident, sep, text = spec.partition("=")
+        if sep and ident.strip() in idents:
+            key, text = ident.strip(), text
+        elif len(idents) == 1:
+            key, text = idents[0], spec
+        else:
+            sys.exit(f"--note {spec[:40]!r}: при нескольких документах "
+                     "назовите документ: --note ДОКУМЕНТ=\"текст\"")
+        if key in notes:
+            sys.exit(f"--note для {key} дан дважды")
+        notes[key] = text
+    return notes
 
 
 def pages_phrase(pages):
@@ -266,7 +311,8 @@ def build_text(ctx, note=None):
         parts.append(f"Места встречаются: {found}.")
     else:
         parts.append("Места найдены не были: " + ", ".join(ctx["places"])
-                     + " в распознанном тексте не встречаются.")
+                     + " в распознанном тексте не встречаются (с учётом "
+                     f"искажений распознавания до {num(PLACE_THRESHOLD)}).")
 
     c = ctx["counts"]
     parts.append(f"Поиск «{ctx['surname']}»: кандидатов при обычном пороге "
@@ -338,7 +384,9 @@ def print_review(ctx):
         return
     print("--- нужен разбор глазами ---")
     for label, pages in ctx["place_hits"].items():
-        print(f"  место «{label}»: {pages_phrase(pages)}")
+        words = ", ".join(ctx.get("place_words", {}).get(label, []))
+        print(f"  место «{label}»: {pages_phrase(pages)}"
+              + (f" ({words})" if words else ""))
     for c in todo:
         mark = {"exact": "ТОЧНО", "partial": "ОБРЫВОК"}.get(c["kind"], "")
         print(f"  стр. {c['page']:>3}  {c['raw']!r:18} {mark}")
@@ -351,28 +399,33 @@ def main():
     ap.add_argument("action", choices=("draft", "accept"))
     ap.add_argument("surname")
     ap.add_argument("idents", nargs="+", help="один или несколько документов")
-    ap.add_argument("--note", help="разбор кандидатов и мест, не отсеянных "
-                                   "автоматически; общий на все документы")
+    ap.add_argument("--note", action="append", metavar="[ДОКУМЕНТ=]ТЕКСТ",
+                    help="разбор кандидатов и мест, не отсеянных автоматически; "
+                         "при нескольких документах — ДОКУМЕНТ=текст, "
+                         "по одному --note на документ")
     a = ap.parse_args()
+    notes = parse_notes(a.note, a.idents)
 
     contexts = [gather(i, a.surname) for i in a.idents]
     if a.action == "draft":
         for ctx in contexts:
+            note = notes.get(ctx["ident"])
             print(f"=== {ctx['ident']} ===\n")
-            print(build_text(ctx, a.note))
+            print(build_text(ctx, note))
             print()
             print_review(ctx)
-            for p in problems(ctx, a.note):
+            for p in problems(ctx, note):
                 print(f"  ! {p}")
         return
 
     # Сначала проверяются все документы, потом пишется хоть один:
     # половина записанных вердиктов хуже ни одного.
-    refusal = [p for ctx in contexts for p in problems(ctx, a.note)]
+    refusal = [p for ctx in contexts
+               for p in problems(ctx, notes.get(ctx["ident"]))]
     if refusal:
         sys.exit("вердикт не записан:\n  " + "\n  ".join(refusal))
     for ctx in contexts:
-        record(ctx, a.note)
+        record(ctx, notes.get(ctx["ident"]))
         catalog.refresh(ctx["ident"])
         print(f"{ctx['ident']}: записан вердикт absent")
     print(f"журнал: {journal.rebuild()}")

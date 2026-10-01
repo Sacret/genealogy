@@ -8,7 +8,9 @@ HTML здесь — представление, а не хранилище. Ис
 """
 
 import base64
+import hashlib
 import html
+import json
 import pathlib
 import re
 from collections import OrderedDict
@@ -590,6 +592,103 @@ const count = document.getElementById('count');
 const bar = document.getElementById('bar');
 const space = document.getElementById('barspace');
 
+// Ключ фильтра у строки поиска. В разметке у строки только своё —
+// фамилия (data-f) и страницы (data-p), а название и номер дела берутся у
+// карточки или строки списка, к которой она относится: повторённые в
+// каждой строке, они занимали в журнале больше места, чем сами строки.
+// `n` — то, на что строка «не найдена» отвечает без нажатого чипа, `k` —
+// то же вместе с фамилией. Считается один раз и запоминается на элементе.
+function keys(el) {
+  if (el._k === undefined) {
+    const doc = el.closest('.doc, .nil-doc');
+    const head = doc && doc.querySelector('h2, a');
+    const title = head ? head.textContent : (doc ? doc.firstChild.textContent : '');
+    el._n = [title, doc ? doc.id : '', el.dataset.p || '']
+      .join(' ').toLowerCase().trim();
+    el._k = el.dataset.f + ' ' + el._n;
+  }
+  return el;
+}
+
+// Списки «Ничего не найдено» — отдельные файлы journal/nils-<год>.js, и
+// строки в них приходят, когда до списка доходят: прокруткой, фильтром или
+// ссылкой на такое дело. Файл — вызов journalNils(год, записи); подключается
+// он тегом <script>, потому что журнал открывают и прямо с диска, а
+// `fetch` с диска браузер не пускает.
+const nilBoxes = Array.from(document.querySelectorAll('.nils[data-src]'));
+window.journalNils = (key, rows) => {
+  const box = nilBoxes.find(b => b.dataset.key === key);
+  if (!box || box.dataset.ready) return;
+  const ul = box.querySelector('ul');
+  const frag = document.createDocumentFragment();
+  rows.forEach(([id, title, url, bits, tags]) => {
+    const li = document.createElement('li');
+    li.className = 'nil-doc';
+    li.id = id;
+    if (url) {
+      const a = document.createElement('a');
+      a.href = url + '/view/';
+      a.target = '_blank';
+      a.textContent = title;
+      li.append(a);
+    } else {
+      li.append(title);
+    }
+    const meta = document.createElement('span');
+    meta.className = 'nil-meta';
+    meta.textContent = '(' + bits + ')';
+    li.append(' ', meta);
+    tags.forEach(([f, st]) => {
+      const t = document.createElement('span');
+      t.hidden = true;
+      t.dataset.f = f.toLowerCase();
+      t.dataset.s = st;
+      li.append(t);
+    });
+    frag.append(li);
+  });
+  ul.append(frag);
+  ul.style.minHeight = '';
+  box.dataset.ready = '1';
+};
+function loadNils(box) {
+  if (!box._load) {
+    box._load = new Promise(done => {
+      const s = document.createElement('script');
+      s.src = box.dataset.src;
+      s.onload = done;
+      // Файла рядом нет — журнал унесли от папки journal/. Пустое место
+      // под список тогда называет недостающий файл, как и пропавшая
+      // вырезка: «не загрузилось» ничего не говорит, имя файла — говорит.
+      s.onerror = () => {
+        box.querySelector('ul').style.minHeight = '';
+        box.querySelector('.nil-head').append(' — файл '
+          + box.dataset.src.split('?')[0] + ' рядом с журналом не найден');
+        box.dataset.ready = 'gone';
+        done();
+      };
+      document.head.append(s);
+    });
+  }
+  return box._load;
+}
+let allNils = null;
+function loadAllNils() {
+  if (!allNils) allNils = Promise.all(nilBoxes.map(loadNils));
+  return allNils;
+}
+const nilsPending = () => nilBoxes.some(b => !b.dataset.ready);
+if ('IntersectionObserver' in window) {
+  // С запасом в пару экранов: пока читают конец года, следующий список
+  // уже на месте, и прокрутка не упирается в пустоту.
+  const io = new IntersectionObserver(entries => entries.forEach(en => {
+    if (en.isIntersecting) { io.unobserve(en.target); loadNils(en.target); }
+  }), {rootMargin: '1500px 0px'});
+  nilBoxes.forEach(b => io.observe(b));
+} else {
+  loadAllNils();
+}
+
 function plural(n, one, few, many) {
   if (n % 100 >= 11 && n % 100 <= 14) return many;
   const d = n % 10;
@@ -605,6 +704,15 @@ function apply() {
   const on = chips.filter(c => c.getAttribute('aria-pressed') === 'true')
                   .map(c => c.dataset.s);
   const active = q || on.length;
+  // Фильтр отвечает за весь журнал, а не за подгруженную часть: пока
+  // списки не пришли, счёт и чипы врали бы. Поэтому сначала догружаем всё,
+  // а пересчитываем, когда пришло.
+  if (active && nilsPending()) {
+    count.classList.add('on');
+    count.textContent = 'Загружаю списки…';
+    loadAllNils().then(apply);
+    return;
+  }
   let shown = 0;
   // Строки считаются и по одному полю тоже: число на чипе должно говорить,
   // сколько строк он оставит из набранных сейчас, а не сколько их в
@@ -613,9 +721,10 @@ function apply() {
   // чему.
   const tally = {};
   // Строка поиска — это и `tr` в карточке, и невидимый `span` в строке
-  // дела без находок: у обоих `data-k` и `data-s`, считаются они одинаково.
-  document.querySelectorAll('[data-k]').forEach(tr => {
-    const hit = !q || tr.dataset.k.includes(q);
+  // дела без находок: у обоих `data-f` и `data-s`, считаются они одинаково.
+  document.querySelectorAll('[data-f]').forEach(tr => {
+    keys(tr);
+    const hit = !q || tr._k.includes(q);
     if (hit) tally[tr.dataset.s] = (tally[tr.dataset.s] || 0) + 1;
     // Фамилия в строке «не найдена» — это то, по чему искали, а не то, что
     // есть в томе. Пока чип «не найдена» не нажат, такая строка отвечает
@@ -623,7 +732,7 @@ function apply() {
     // бы все тома, где его искали и не нашли. Нажатый чип возвращает их
     // намеренно — «где я его уже искал» тоже законный вопрос.
     const seen = tr.dataset.s === 'no' && !on.includes('no')
-      ? tr.dataset.n.includes(q) : hit;
+      ? tr._n.includes(q) : hit;
     const hide = !seen || (on.length && !on.includes(tr.dataset.s));
     tr.classList.toggle('hidden', hide);
     if (!hide) shown++;
@@ -642,15 +751,19 @@ function apply() {
   document.querySelectorAll('.year-block').forEach(b => {
     let left = 0;
     b.querySelectorAll('.doc, .nil-doc').forEach(d => {
-      const any = !active || d.querySelectorAll('[data-k]:not(.hidden)').length;
+      const any = !active || d.querySelectorAll('[data-f]:not(.hidden)').length;
       d.style.display = any ? '' : 'none';
       if (any) { left++; docs++; }
     });
     // Подпись «ничего не найдено» гаснет вместе с последней строкой списка.
+    // Без фильтра список виден всегда — и пока его строки не пришли: иначе
+    // спрятанный пустой список так и не дождался бы подгрузки.
     b.querySelectorAll('.nils').forEach(n => {
-      n.classList.toggle('hidden',
+      n.classList.toggle('hidden', !!active &&
         !n.querySelector('.nil-doc:not([style*="none"])'));
     });
+    // Без фильтра год не гаснет: строки его списка могли ещё не прийти.
+    if (!active) left = left || 1;
     const tag = b.querySelector('.year-tag');
     if (tag) tag.classList.toggle('off', !left);
     // Пузырь того же года в полосе гаснет вместе с блоком: иначе он вёл бы
@@ -745,6 +858,13 @@ document.querySelectorAll('summary .person').forEach(a => {
 // по ссылке, и при открытии страницы с готовым #bv0000386 в адресе.
 function openTarget() {
   const id = decodeURIComponent(location.hash.slice(1));
+  // Дело без находок, чей список ещё не пришёл, на странице пока не
+  // существует. Какого оно года, страница не знает, поэтому догружаются
+  // все списки, а наведение повторяется, когда они пришли.
+  if (id && !document.getElementById(id) && nilsPending()) {
+    loadAllNils().then(() => { openTarget(); toAnchor(true); });
+    return;
+  }
   const sec = id && document.getElementById(id);
   const det = sec && sec.querySelector('details.searches');
   if (det) det.open = true;
@@ -1674,17 +1794,15 @@ def status_chips(searches) -> str:
     return "".join(out)
 
 
-def nil_item(ident, d) -> str:
-    """Дело без находок одной строкой: название-ссылка, читаемость, страницы.
+def nil_record(ident, d) -> list:
+    """Дело без находок как запись для `journal/nils-*.js`.
 
-    Под строкой лежат невидимые метки поисков — те же `data-k`/`data-s`,
-    что у строк таблицы в карточке, — чтобы фильтр по фамилии и чипы
-    считали такие дела наравне с остальными.
+    [дело, название, адрес, «читаемо 50%, 4 стр.», [[фамилия, итог], …]].
+    Строку из записи собирает скрипт страницы, и та же запись — всё, что
+    нужно фильтру: название и номер дела он берёт из самой строки, фамилию
+    и итог — из невидимой метки поиска.
     """
     meta = d["meta"]
-    title, url = meta.get("title") or ident, meta.get("url", "")
-    name = (f"<a href='{e(url)}/view/' target=_blank>{e(title)}</a>"
-            if url else e(title))
     bits = []
     read = readability(d.get("coverage"))
     if read:
@@ -1693,16 +1811,57 @@ def nil_item(ident, d) -> str:
         bits.append("читаемость не измерена")
     if meta.get("pages"):
         bits.append(f"{meta['pages']} стр.")
-    tags = "".join(
-        f"<span hidden data-k='{e(' '.join([r['surname'], title, ident]).lower())}'"
-        f" data-s='{row_badge(r)[1]}'"
-        f" data-n='{e(' '.join([title, ident]).lower())}'></span>"
-        for r in d["rows"])
+    return [ident, meta.get("title") or ident, meta.get("url", ""),
+            ", ".join(bits),
+            [[r["surname"], row_badge(r)[1]] for r in d["rows"]]]
+
+
+def nil_item(ident, d) -> str:
+    """Дело без находок одной строкой: название-ссылка, читаемость, страницы.
+
+    Разметка та же, что собирает скрипт страницы из `nil_record`; здесь
+    она нужна тестам и как образец. Под строкой лежат невидимые метки
+    поисков — фамилия в `data-f` и итог в `data-s`, как у строк таблицы
+    в карточке, — чтобы фильтр по фамилии и чипы считали такие дела
+    наравне с остальными.
+    """
+    ident, title, url, bits, tags = nil_record(ident, d)
+    name = (f"<a href='{e(url)}/view/' target=_blank>{e(title)}</a>"
+            if url else e(title))
+    marks = "".join(f"<span hidden data-f='{e(f.lower())}' data-s='{s}'></span>"
+                    for f, s in tags)
     return (f"<li class=nil-doc id='{e(ident)}'>{name} "
-            f"<span class=nil-meta>({', '.join(bits)})</span>{tags}</li>")
+            f"<span class=nil-meta>({bits})</span>{marks}</li>")
+
+
+# Списки «Ничего не найдено» лежат рядом со страницей, по файлу на год, и
+# подгружаются, когда до них доходят: в октябре 2026-го они занимали больше
+# половины журнала (1,0 из 1,8 МБ), и каждый день прибавлялось по полсотни
+# выпусков. Файл — скрипт, а не JSON: `fetch` с диска (журнал, открытый
+# двойным щелчком) браузер запрещает, а `<script src>` — нет.
+NILS_DIR = "journal"
+# Высота строки списка вместе с полями (21 + 6 px, см. .nil-doc в CSS):
+# пустой список держит место под будущие строки, иначе подгрузка года
+# сдвигала бы всё, что ниже, и переход по полосе лет промахивался бы.
+NIL_ROW_PX = 27
+
+
+def nils_chunk(key, records) -> tuple:
+    """(имя файла, содержимое) для списка одного года."""
+    body = json.dumps(records, ensure_ascii=False, separators=(",", ":"))
+    js = f"journalNils({json.dumps(key)},{body});\n"
+    return f"nils-{key}.js", js
 
 
 def render(docs) -> str:
+    """Страница журнала; списки без находок — см. `build`."""
+    return build(docs)[0]
+
+
+def build(docs) -> tuple:
+    """(страница, {имя файла в journal/: содержимое}) — журнал целиком."""
+    chunks = {}
+    nil_rows = []           # записи текущего списка, пока он открыт
     mark = _mark()
     searches = [r for d in docs.values() for r in d["rows"]]
     names = {r["surname"].lower() for r in searches}
@@ -1797,8 +1956,8 @@ def render(docs) -> str:
         # Пустые дела стоят в конце своего года, так что список один на год
         # и закрывается сменой года.
         if open_nils and (not compact or d.get("year") != seen_year):
-            out.append("</ul></div>")
-            open_nils = False
+            out.append(close_nils(seen_year, nil_rows, chunks))
+            open_nils, nil_rows = False, []
         if d.get("year") != seen_year:
             if open_block:
                 out.append("</div>")
@@ -1814,11 +1973,8 @@ def render(docs) -> str:
             out.append("<div class=year-tag aria-hidden=true>"
                        f"<span>{label}</span></div>")
         if compact:
-            if not open_nils:
-                out.append("<div class=nils><p class=nil-head>Ничего не "
-                           "найдено</p><ul>")
-                open_nils = True
-            out.append(nil_item(ident, d))
+            open_nils = True
+            nil_rows.append(nil_record(ident, d))
             continue
         out.append(f"<section class=doc id='{e(ident)}'>")
         out.append(f"<h2>{e(title)}</h2>")
@@ -1897,10 +2053,13 @@ def render(docs) -> str:
                       " class=maybe" if p in confirmed else "")
                 links.append(f"<a{cl} href='{e(url)}/view/?#page={e(p)}' "
                              f"target=_blank>{e(p)}</a>")
-            key = " ".join([r["surname"], title, ident, *pages]).lower()
-            rest = " ".join([title, ident, *pages]).lower()
-            out.append(f"<tr data-k='{e(key)}' data-s='{cls}' "
-                       f"data-n='{e(rest)}'>")
+            # Название и номер дела фильтр берёт из заголовка карточки,
+            # а не из строки: повторённые в каждой строке, они весили
+            # больше самих строк. Здесь — только то, что у строки своё.
+            out.append(f"<tr data-f='{e(r['surname'].lower())}' "
+                       f"data-s='{cls}'"
+                       + (f" data-p='{e(' '.join(pages).lower())}'"
+                          if pages else "") + ">")
             out.append(f"<td class=when>{e(r['date'][:16].replace('T', ' '))}</td>")
             out.append(f"<td class=surname>{e(r['surname'])}</td>")
             out.append(f"<td class=num data-l='Кандидатов'>{r['hits']}</td>")
@@ -1934,7 +2093,7 @@ def render(docs) -> str:
         out.append("</tbody></table></details></section>")
 
     if open_nils:
-        out.append("</ul></div>")
+        out.append(close_nils(seen_year, nil_rows, chunks))
     if open_block:
         out.append("</div>")
     out.append(
@@ -2001,12 +2160,45 @@ def render(docs) -> str:
         "</div></div></div>"
         "</dialog>")
     out.append(f"<script>{JS}</script></body></html>")
-    return "\n".join(out)
+    return "\n".join(out), chunks
+
+
+def close_nils(year, records, chunks) -> str:
+    """Список «Ничего не найдено» года: заголовок с числом и пустое место.
+
+    Строки приходят из `journal/nils-<год>.js`; в адресе файла — хэш
+    содержимого, чтобы браузер не взял из кэша вчерашний список к
+    сегодняшней странице.
+    """
+    key = year_anchor(year) if year else NOYEAR_ANCHOR
+    name, js = nils_chunk(key, records)
+    chunks[name] = js
+    ver = hashlib.sha1(js.encode("utf-8")).hexdigest()[:10]
+    n = len(records)
+    return (f"<div class=nils data-key='{key}' "
+            f"data-src='{NILS_DIR}/{name}?v={ver}'>"
+            f"<p class=nil-head>Ничего не найдено <span class=nil-n>· {n}</span>"
+            "</p>"
+            f"<ul style='min-height:{n * NIL_ROW_PX}px'></ul></div>")
 
 
 def rebuild() -> pathlib.Path:
+    page, chunks = build(collect())
+    folder = ROOT / NILS_DIR
+    folder.mkdir(exist_ok=True)
+    for name, js in chunks.items():
+        path = folder / name
+        # Не переписывать неизменившийся файл: иначе git видел бы правку
+        # каждого года после каждого поиска, хотя менялся один.
+        if not path.exists() or path.read_text(encoding="utf-8") != js:
+            path.write_text(js, encoding="utf-8")
+    # Год, из которого пустые дела ушли (нашлось что-то, сменился год в
+    # заголовке), оставил бы файл, на который страница уже не ссылается.
+    for stale in folder.glob("nils-*.js"):
+        if stale.name not in chunks:
+            stale.unlink()
     dst = ROOT / "journal.html"
-    dst.write_text(render(collect()), encoding="utf-8")
+    dst.write_text(page, encoding="utf-8")
     return dst
 
 

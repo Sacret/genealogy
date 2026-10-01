@@ -1,10 +1,13 @@
 """Проверка на реальных искажениях: дореформенная орфография,
 падежи и типичные подмены букв в OCR."""
 
+import json
 import re
 import sys
 from catalog import SKIP_BY_ID, build, classify, years_covered
-from journal import THUMBS, crops_for, markup, render, shot_page, year_strip
+from journal import (THUMBS, crops_for, markup, nil_item, render, shot_page,
+                     year_strip)
+from journal import build as build_journal
 from docstore import BIG_SCAN_PIXELS, ROOT, allow_big_scans
 import boxes
 from prune import GITIGNORE, KEEP_LINE, finding_pages
@@ -91,7 +94,8 @@ def main():
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17 + 16 + 17 + 38)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17 + 16 + 17 + 38
+             + 4)   # журнал: списки в файлах (3), строки без названия (1)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -725,30 +729,45 @@ def compact_suite():
     mixed = _doc(1911, "found")
     mixed["rows"].append({**mixed["rows"][0], "surname": "Кармазинъ",
                           "status": "absent"})
-    html = render({"a": empty, "b": two, "c": mixed, "d": _doc(1912, "absent")})
+    html, chunks = build_journal({"a": empty, "b": two, "c": mixed,
+                          "d": _doc(1912, "absent")})
+    rows = {r[0]: r for js in chunks.values()
+            for r in json.loads(js[js.index(",") + 1:js.rindex(")")])}
+    item = nil_item("a", empty)
     checks = [
         ("пустое дело — не карточка", "<section class=doc id='a'>" not in html),
-        ("а строка с якорем", "<li class=nil-doc id='a'>" in html),
+        ("строк списка в странице нет — они в файлах",
+         "nil-doc" not in html.split("<body>")[1].split("<script>")[0]
+         and sorted(chunks) == ["nils-g1911.js", "nils-g1912.js"]),
+        ("а строка с якорем", item.startswith("<li class=nil-doc id='a'>")),
         ("название — ссылка во вьюер",
          "<a href='https://x/item/1/view/' target=_blank>Ведомости № 1</a>"
-         in html),
+         in item),
         ("читаемость и страницы в скобках",
-         "(читаемо 50%, 4 стр.)" in html),
-        ("без замера так и сказано", "(читаемость не измерена, 4 стр.)" in html),
+         "(читаемо 50%, 4 стр.)" in item and rows["a"][3] == "читаемо 50%, 4 стр."),
+        ("без замера так и сказано",
+         rows["b"][3] == "читаемость не измерена, 4 стр."),
         ("подряд идущие — один список",
-         html.count("<div class=nils>") == 2
-         and html.index("id='a'") < html.index("id='b'")
-         < html.index("</ul></div>")),
+         html.count("<div class=nils ") == 2
+         and [r[0] for r in json.loads(
+             chunks["nils-g1911.js"].split(",", 1)[1][:-3])] == ["a", "b"]),
+        ("число дел в заголовке и место под строки",
+         "Ничего не найдено <span class=nil-n>· 2</span>" in html
+         and "min-height:54px" in html),
+        ("файл в адресе с хэшем содержимого",
+         re.search(r"data-src='journal/nils-g1911\.js\?v=[0-9a-f]{10}'", html)
+         is not None),
         ("дело с находкой — карточка", "<section class=doc id='c'>" in html),
         ("карточка года — раньше списка",
          html.index("<section class=doc id='c'>")
-         < html.index("<div class=nils>")),
+         < html.index("<div class=nils ")),
         ("список года закрыт до следующего",
          "</ul></div>\n</div>\n<div class=year-mark id='g1912'>"
          in render({"a": empty, "d": _doc(1912, "absent")})),
         ("последний список закрыт", "</ul></div>\n</div>\n<footer>" in html),
-        ("фильтр видит поиск", re.search(
-            r"data-s='no' data-n='[^']*'></span></li>", html) is not None),
+        ("фильтр видит поиск: фамилия и итог у метки",
+         "<span hidden data-f='могучевъ' data-s='no'></span></li>" in item
+         and rows["a"][4] == [["Могучевъ", "no"]]),
     ]
     for name, ok in checks:
         bad += not ok
@@ -809,8 +828,11 @@ def chips_suite():
         ("пузырь «родство не установлено»", "data-s='maybe'" in html),
         ("пузырь «родство подтверждено»", "data-s='ok'" in html),
         ("итог назван на каждой строке",
-         len(re.findall(r"<tr data-k='[^']*' data-s='\w+' data-n='[^']*'>", html))
-         == html.count("<tr data-k=")),
+         len(re.findall(r"<tr data-f='[^']*' data-s='\w+'( data-p='[^']*')?>",
+                        html))
+         == html.count("<tr data-f=")),
+        ("название дела в строке не повторяется", "data-k=" not in html
+         and not re.search(r"<(tr|span)[^>]*data-n=", html)),
         ("счёт рядом с пузырём", "<span class=n>1</span>" in html),
     ]
     for name, ok in checks:

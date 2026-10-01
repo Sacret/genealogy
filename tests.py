@@ -15,6 +15,10 @@ from eval import evaluate as evaluate_ocr, load_corpus as load_ocr_corpus
 from audit import (validate_box, validate_meta, validate_quality,
                    validate_verdict)
 from surnamefind.search import find_in_text, stem_query
+import docstore
+import ocr_pages
+import quality
+import tess
 
 # (текст, должно ли найтись)
 CASES_KUZNETSOV = [
@@ -74,12 +78,13 @@ def main():
            + pagelist_suite() + bigscan_suite() + thumbs_suite()
            + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
-           + events_suite() + registry_suite() + corpus_suite() + audit_suite())
+           + events_suite() + registry_suite() + corpus_suite() + audit_suite()
+           + tess_suite())
     bad += ocr_eval_suite()
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -1117,6 +1122,157 @@ def boxes_suite():
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad
+
+
+def tess_suite():
+    import json
+    import pathlib
+    import shutil
+    import subprocess
+    import tempfile
+    from types import SimpleNamespace
+    print("\nодин проход Tesseract:")
+    tsv = ("level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop"
+           "\twidth\theight\tconf\ttext\n"
+           "1\t1\t0\t0\t0\t0\t0\t0\t10\t10\t-1\t\n"
+           "5\t1\t1\t1\t1\t1\t0\t0\t5\t5\t90.0\tКазакъ\n"
+           "5\t1\t1\t1\t1\t2\t0\t0\t5\t5\t50.0\tИванъ\n"
+           "5\t1\t1\t1\t1\t3\t0\t0\t5\t5\t-1\t \n")
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append((cmd, kw))
+        base = pathlib.Path(cmd[2])
+        base.with_suffix(".txt").write_text("Казакъ Иванъ\n", encoding="utf-8")
+        base.with_suffix(".tsv").write_text(tsv, encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    def crash_run(cmd, **kw):
+        return SimpleNamespace(returncode=1, stdout=b"", stderr=b"Error boom")
+
+    def raises(fn, *args):
+        try:
+            fn(*args)
+        except Exception as e:
+            return type(e).__name__
+        return None
+
+    text, conf, words = tess.recognize("p0001.jpg", "rus", 6, fake_run)
+    old_root = docstore.ROOT
+    old_recognize = tess.recognize
+    tmp = tempfile.TemporaryDirectory()
+    docstore.ROOT = pathlib.Path(tmp.name)
+    try:
+        d = docstore.ROOT / "bv0000903"
+        (d / "scans").mkdir(parents=True)
+        (d / "ocr").mkdir()
+        scans = []
+        for n in (1, 2, 3):
+            f = d / "scans" / f"p{n:04d}.jpg"
+            f.write_bytes(b"x")
+            scans.append(f)
+
+        tess.recognize = lambda img, lang, psm, run=None: (
+            ("Текст страницы\n", 71.5, 120))
+        n1, stat1, err1 = ocr_pages.run((scans[0], d / "ocr/p0001.txt", "rus", "6"))
+        written = ((d / "ocr/p0001.txt").read_text(encoding="utf-8")
+                   if (d / "ocr/p0001.txt").exists() else None)
+        leftover = (d / "ocr/p0001.part").exists()
+        n1b, stat1b, err1b = ocr_pages.run(
+            (scans[0], d / "ocr/p0001.txt", "rus", "6"))
+
+        def boom(img, lang, psm, run=None):
+            raise tess.TesseractError("упал")
+        tess.recognize = boom
+        n2, stat2, err2 = ocr_pages.run((scans[1], d / "ocr/p0002.txt", "rus", "6"))
+        failed_left = (d / "ocr/p0002.txt").exists() or (d / "ocr/p0002.part").exists()
+
+        ocr_pages.save_stats(d, "rus", "6", {"1": {"conf": 71.5, "words": 120}})
+        same = ocr_pages.load_stats(d, "rus", "6")
+        other_psm = ocr_pages.load_stats(d, "rus", "4")
+        (d / ocr_pages.STATS).write_text("{не json", encoding="utf-8")
+        broken = ocr_pages.load_stats(d, "rus", "6")
+
+        # замер: страница 1 из статистики, 2 и 3 — распознаются
+        ocr_pages.save_stats(d, "rus", "6", {"1": {"conf": 71.5, "words": 120}})
+        measured = []
+
+        def measure_fake(img, lang, psm, run=None):
+            measured.append(img.name)
+            return "", 40.0, 10
+        tess.recognize = measure_fake
+        stats, reused = quality.measure(scans, "6", d, 2)
+        measured_all = sorted(measured)
+        measured.clear()
+        quality.measure(scans, "6", d, 2, remeasure=True)
+        remeasured = sorted(measured)
+        tess.recognize = boom
+        try:
+            quality.measure(scans, "6", d, 2, remeasure=True)
+            exited = False
+        except SystemExit as e:
+            exited = "стр. 1, 2, 3" in str(e)
+        tess.recognize = old_recognize
+
+        real = None
+        if shutil.which("tesseract"):
+            img = pathlib.Path(__file__).parent / "bench" / "p020_150.jpg"
+            plain = subprocess.run(
+                ["tesseract", str(img), "-", "-l", "rus", "--psm", "6"],
+                capture_output=True, text=True).stdout
+            real_text, _, real_words = tess.recognize(img, "rus", 6)
+            real = real_text == plain and real_words > 0
+    finally:
+        tess.recognize = old_recognize
+        docstore.ROOT = old_root
+        tmp.cleanup()
+
+    checks = [
+        ("уверенность — среднее по словам без служебных строк",
+         parse_ok(tess.parse_tsv(tsv))),
+        ("страница без слов даёт нули", tess.parse_tsv("level\ttext\n") == (0.0, 0)),
+        ("текст и статистика из одного вызова",
+         text == "Казакъ Иванъ\n" and conf == 70.0 and words == 2
+         and len(calls) == 1),
+        ("tesseract просят сразу txt и tsv", calls[0][0][-2:] == ["txt", "tsv"]),
+        ("потоки OpenMP ограничены, срок задан",
+         calls[0][1]["env"]["OMP_THREAD_LIMIT"] == "1"
+         and calls[0][1]["timeout"] == tess.TIMEOUT),
+        ("упавший tesseract — ошибка, а не пустой текст",
+         raises(tess.recognize, "p.jpg", "rus", 6, crash_run) == "TesseractError"),
+        ("и в режиме «только текст»",
+         raises(tess.text_only, "p.jpg", "rus", 6, crash_run) == "TesseractError"),
+        ("страница записана вместе со статистикой",
+         n1 == 1 and stat1 == {"conf": 71.5, "words": 120} and err1 is None
+         and written == "Текст страницы\n" and not leftover),
+        ("готовая страница пропускается", (stat1b, err1b) == (None, None)),
+        ("упавшая страница ошибка, файла нет",
+         n2 == 2 and stat2 is None and "упал" in err2 and not failed_left),
+        ("статистика того же режима читается",
+         same == {"1": {"conf": 71.5, "words": 120}}),
+        ("статистика чужого режима не годится", other_psm == {}),
+        ("битая статистика — как её нет", broken == {}),
+        ("замер берёт готовое и дочитывает остальное",
+         measured_all == ["p0002.jpg", "p0003.jpg"] and reused == 1
+         and [x[0] for x in stats] == [1, 2, 3]),
+        ("--remeasure распознаёт всё заново",
+         remeasured == ["p0001.jpg", "p0002.jpg", "p0003.jpg"]),
+        ("сбой замера не пишет частичный итог", exited),
+    ]
+    if real is None:
+        checks.append(("реальный tesseract: пропущено, его нет", True))
+    else:
+        checks.append(("реальный tesseract: текст как при обычном вызове", real))
+    bad = 0
+    for label, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def parse_ok(result):
+    conf, words = result
+    return abs(conf - 70.0) < 1e-9 and words == 2
 
 
 if __name__ == "__main__":

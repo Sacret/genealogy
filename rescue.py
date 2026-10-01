@@ -27,11 +27,11 @@ import argparse
 import json
 import pathlib
 import shutil
-import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
+import tess
 from docstore import allow_big_scans, doc_dir, load_meta
 
 BAND, STEP = 190, 95        # высота полосы и шаг: внахлёст, чтобы строка
@@ -74,11 +74,9 @@ def bands(args):
     out = []
     for y in range(0, h - 60, STEP):
         im.crop((0, y, w, min(h, y + BAND))).save(tmp, dpi=(400, 400))
-        r = subprocess.run(["tesseract", str(tmp), "-", "-l", "rus", "--psm", "6"],
-                           capture_output=True)
-        # decode вручную: на битой полосе tesseract изредка отдаёт не-UTF8,
-        # и падение одной страницы не должно ронять весь прогон
-        out.append(r.stdout.decode("utf-8", "replace"))
+        # tess.text_only декодирует с заменой: на битой полосе tesseract
+        # изредка отдаёт не-UTF8, а сбой процесса — ошибка страницы
+        out.append(tess.text_only(tmp, "rus", "6"))
     dst.write_text("\n".join(out), encoding="utf-8")
     return False
 
@@ -93,9 +91,7 @@ def cols(args):
     out = []
     for left, right in columns(im):
         im.crop((left, 200, right, im.height - 40)).save(tmp, dpi=(400, 400))
-        r = subprocess.run(["tesseract", str(tmp), "-", "-l", "rus", "--psm", "6"],
-                           capture_output=True)
-        out.append(r.stdout.decode("utf-8", "replace"))
+        out.append(tess.text_only(tmp, "rus", "6"))
     dst.write_text("\n".join(out), encoding="utf-8")
     return False
 
@@ -141,14 +137,30 @@ def main():
 
     how = "колонками" if a.cols else "полосами"
     print(f"{load_meta(a.ident).get('title', a.ident)}: {how} {len(jobs)} стр.")
-    fresh = 0
+    fresh, failed = 0, {}
+
+    def safe(job):
+        # Сбой Tesseract на одной странице не роняет остальные; файл такой
+        # страницы не пишется (mode пишет его в самом конце), и повторный
+        # запуск возьмёт её снова.
+        try:
+            return job, mode(job), None
+        except Exception as e:
+            return job, True, f"{type(e).__name__}: {e}"
+
     with ThreadPoolExecutor(a.jobs) as ex:
-        for i, cached in enumerate(ex.map(mode, jobs), 1):
+        for i, (job, cached, error) in enumerate(ex.map(safe, jobs), 1):
+            if error:
+                failed[int(job[1].stem[1:])] = error
             fresh += not cached
             if i % 20 == 0:
                 print(f"  {i}/{len(jobs)}", file=sys.stderr)
     shutil.rmtree(work, ignore_errors=True)
-    print(f"готово: {len(jobs)} стр., заново {fresh}")
+    print(f"готово: {len(jobs)} стр., заново {fresh}, ошибок {len(failed)}")
+    if failed:
+        for n, why in sorted(failed.items()):
+            print(f"  стр. {n}: {why}", file=sys.stderr)
+        sys.exit(f"не прочитаны стр. {', '.join(map(str, sorted(failed)))}")
 
 
 if __name__ == "__main__":

@@ -14,30 +14,60 @@ Tesseract прочёл её как 'Л/огу-' + '4:65'. Никакой пои�
 """
 
 import argparse
-import csv
-import io
 import json
-import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
+import tess
 from docstore import doc_dir, load_meta
+from ocr_pages import load_stats
 
 THRESHOLD = 60.0          # ниже — странице верить нельзя
 
 
 def page_stats(args):
+    """(страница, уверенность, слов); сбой Tesseract — исключение.
+
+    Раньше упавший процесс давал пустой вывод и страницу с нулевой
+    уверенностью: её молча объявляли слабой, а quality.json ложился на
+    диск с неверным замером.
+    """
     img, psm = args
-    out = subprocess.run(["tesseract", str(img), "-", "-l", "rus",
-                          "--psm", psm, "tsv"],
-                         capture_output=True, text=True).stdout
-    rows = [r for r in csv.DictReader(io.StringIO(out), delimiter="\t",
-                                      quoting=csv.QUOTE_NONE)
-            if (r.get("text") or "").strip()]
-    confs = [float(r["conf"]) for r in rows if float(r["conf"]) >= 0]
-    if not confs:
-        return int(img.stem[1:]), 0.0, 0
-    return int(img.stem[1:]), sum(confs) / len(confs), len(rows)
+    _, conf, words = tess.recognize(img, "rus", psm)
+    return int(img.stem[1:]), conf, words
+
+
+def measure(scans, psm, folder, jobs, remeasure=False):
+    """Замер по всем сканам: готовое из ocr_stats.json, остальное — Tesseract.
+
+    `ocr_pages.py` уже получил уверенность тем же проходом, каким читал
+    текст, тем же режимом (psm), так что повторное распознавание тома
+    ради одной колонки TSV — чистая трата. Статистику чужого режима
+    `load_stats` не отдаёт, и тогда замер идёт как прежде.
+    """
+    known = {} if remeasure else load_stats(folder, "rus", psm)
+    stats, todo = [], []
+    for f in scans:
+        got = known.get(str(int(f.stem[1:])))
+        if got:
+            stats.append((int(f.stem[1:]), got["conf"], got["words"]))
+        else:
+            todo.append(f)
+    if todo:
+        with ThreadPoolExecutor(jobs) as ex:
+            futures = [(f, ex.submit(page_stats, (f, psm))) for f in todo]
+            failed = {}
+            for f, fut in futures:
+                try:
+                    stats.append(fut.result())
+                except Exception as e:
+                    failed[int(f.stem[1:])] = f"{type(e).__name__}: {e}"
+        if failed:
+            sys.exit("замер не удался на стр. "
+                     + ", ".join(map(str, sorted(failed)))
+                     + f"\n  quality.json не тронут; первая ошибка: "
+                       f"{failed[min(failed)]}")
+    return sorted(stats), len(scans) - len(todo)
 
 
 def main():
@@ -48,6 +78,9 @@ def main():
                     help="тот же режим, каким страницу распознавали: "
                          "у газет 4, у книг 6")
     ap.add_argument("--jobs", type=int, default=8)
+    ap.add_argument("--remeasure", action="store_true",
+                    help="не брать уверенность из ocr_stats.json, а "
+                         "распознать страницы заново")
     ap.add_argument("--refetch", action="store_true",
                     help="дотянуть вычищенные сканы, чтобы измерить том целиком")
     a = ap.parse_args()
@@ -76,13 +109,13 @@ def main():
     if not scans:
         sys.exit(f"нет сканов в {d/'scans'} — сначала fetch.py")
 
-    with ThreadPoolExecutor(a.jobs) as ex:
-        stats = sorted(ex.map(page_stats, [(f, a.psm) for f in scans]))
+    stats, reused = measure(scans, a.psm, d, a.jobs, a.remeasure)
 
     weak = [(p, c) for p, c, n in stats if c < a.threshold]
     confs = [c for _, c, _ in stats]
     print(f"{load_meta(a.ident).get('title', a.ident)}")
-    print(f"  страниц измерено: {len(stats)}")
+    print(f"  страниц измерено: {len(stats)} "
+          f"(готовых из ocr_stats.json: {reused})")
     print(f"  средняя уверенность: {sum(confs)/len(confs):.1f}")
     print(f"  ниже порога {a.threshold}: {len(weak)} стр. "
           f"({len(weak)/len(stats):.0%})")

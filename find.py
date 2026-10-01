@@ -26,6 +26,11 @@ def _split_first_word(text: str):
     return (m.group(1), m.group(2)) if m else ("", text)
 
 
+# Дополнительные слои чтения рядом с основным `ocr/`. Список один на
+# find.py и verdict.py: что ищется, о том вердикт и пишет в оговорке.
+EXTRA_LAYERS = ("ocr_bands", "ocr_cols", "ocr_prep")
+
+
 def load_pages(ident: str):
     """Страницы по порядку, со склейкой переносов на их границе.
 
@@ -42,8 +47,7 @@ def load_pages(ident: str):
     # то, что развалилось в одном прочтении, часто цело в другом. Колонки
     # тут не роскошь: на газетной полосе ниже 45 они единственные и дают
     # фамилию (Яков Кармазин, стр. 3 выпуска pn0024160).
-    extra = [doc_dir(ident) / "ocr_bands", doc_dir(ident) / "ocr_cols",
-             doc_dir(ident) / "ocr_prep"]
+    extra = [doc_dir(ident) / name for name in EXTRA_LAYERS]
     pages = []
     for f in files:
         t = f.read_text(encoding="utf-8", errors="replace")
@@ -127,6 +131,45 @@ def bare_crop_paths(text: str):
     в прозе читателю ничего не добавляет и выглядит обломком отладки.
     """
     return sorted(set(re.findall(r"\bcrops/\S+?\.png", text)))
+
+
+WEAK_WORDS = re.compile(r"слаб|ненадёж|порог", re.I)
+# Номер страницы — только после «стр.», «страница», «полоса»: голое число
+# в газетном вердикте почти всегда дата или номер выпуска («4 августа»,
+# «№ 62»), и у четырёхполосного выпуска оно совпало бы со слабой полосой.
+PAGE_REF = re.compile(r"(?:стр\.?|страниц\w*|полос\w*)\s*"
+                      r"(\d+(?:\s*(?:,|и|[–—-])\s*\d+)*)", re.I)
+
+
+def named_pages(text: str):
+    """Номера страниц, названные в тексте: «стр. 1, 4», «полосы 2–3»."""
+    out = set()
+    for m in PAGE_REF.finditer(text):
+        for a, b in re.findall(r"(\d+)(?:\s*[–—-]\s*(\d+))?", m.group(1)):
+            lo, hi = int(a), int(b or a)
+            out.update(range(lo, hi + 1) if hi - lo < 1000 else (lo, hi))
+    return out
+
+
+def weak_pages_unmentioned(ident: str, text: str):
+    """Слабые страницы документа, о которых отрицательный вердикт молчит.
+
+    Отрицательный ответ имеет силу только там, где распознавание надёжно
+    (так вышло с 'Могучевъ' на стр. 208 bv0000386), поэтому вердикт
+    «не найдена» по документу со слабыми страницами должен о них сказать:
+    назвать хоть одну страницу («стр. 4») или упомянуть порог. Пустой
+    список — можно писать. Все ныне действующие отрицательные вердикты
+    правило проходят.
+    """
+    path = doc_dir(ident) / "quality.json"
+    if not path.exists():
+        return []
+    weak = json.loads(path.read_text(encoding="utf-8")).get("weak", [])
+    if not weak or WEAK_WORDS.search(text):
+        return []
+    if named_pages(text) & set(weak):
+        return []
+    return weak
 
 
 def kin_persons(spec, kin):
@@ -248,6 +291,9 @@ def main():
     ap.add_argument("--verdict", help="записать итог проверки глазами и выйти")
     ap.add_argument("--status", choices=("found", "absent", "unclear"),
                     help="итог: найдена / нет / неясно. Обязателен при --verdict")
+    ap.add_argument("--ack-weak", action="store_true",
+                    help="принять «не найдена» без упоминания слабых страниц "
+                         "в тексте (они разобраны и описаны иначе)")
     ap.add_argument("--pages", help="страницы, где фамилия подтверждена глазами, "
                                     "через запятую: '223'. Только эти журнал "
                                     "выделяет и снабжает вырезкой")
@@ -334,6 +380,16 @@ def main():
             sys.exit("путь к вырезке в прозе вердикта: " + ", ".join(crop_paths)
                      + "\nжурнал сам показывает вырезку по --pages, называть "
                        "файл в тексте незачем")
+        silent = (weak_pages_unmentioned(a.ident, a.verdict)
+                  if a.status == "absent" and not a.ack_weak else [])
+        if silent:
+            sys.exit("вердикт «не найдена» молчит о слабых страницах: "
+                     + ", ".join(map(str, silent[:10]))
+                     + (" …" if len(silent) > 10 else "")
+                     + "\nназовите их или порог надёжности (например «ниже "
+                       "порога 60 стр. 1, 4»); если страницы уже разобраны "
+                       "глазами и это сказано иначе — --ack-weak\n"
+                       "черновик с оговоркой готовит verdict.py draft")
         pages = re.findall(r"\d+", a.pages) if a.pages else None
         if a.status == "found" and not pages:
             sys.exit("--status found без --pages: назовите страницы находки, "

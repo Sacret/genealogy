@@ -153,7 +153,7 @@ def log_search(ident: str, surname: str, stem: str, threshold: float, hits) -> N
 
 def add_verdict(ident: str, surname: str, verdict: str,
                 status: str = "unclear", confirmed=None, kin=None,
-                persons=None) -> None:
+                persons=None, evidence=None) -> None:
     """Итог проверки глазами.
 
     Сырое число попаданий обманчиво: пять кандидатов на 'Кармазинъ'
@@ -175,6 +175,10 @@ def add_verdict(ident: str, surname: str, verdict: str,
     persons.json}. Родство подтверждает человек, а не поиск, и «зелёная»
     страница без имени говорит только «кто-то из семьи»; с именем она
     ведёт на страницу родословной, где эта запись и пригодится.
+
+    `evidence` — числа, на которых стоит проза вердикта (слабые страницы,
+    прочитанные слои, отсеянные слова). Их пишет `verdict.py`, и по ним
+    `audit.py` сверяет текст с `quality.json`.
     """
     rec = {
         "type": "verdict",
@@ -189,6 +193,8 @@ def add_verdict(ident: str, surname: str, verdict: str,
         rec["kin"] = [str(p) for p in kin]
     if persons:
         rec["persons"] = {str(page): pid for page, pid in persons.items()}
+    if evidence:
+        rec["evidence"] = evidence
     with (doc_dir(ident) / "searches.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 

@@ -17,10 +17,10 @@
 """
 
 import argparse
-import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
+import tess
 from docstore import allow_big_scans, doc_dir, load_meta
 
 PERCENTILE = 5.0          # подобрано по отдаче фамилий на стр. 392 bv0000390
@@ -51,9 +51,10 @@ def job(args):
     if is_binary(img):
         return "уже бинарный"
     binarize(img, tmp, pct)
-    r = subprocess.run(["tesseract", str(tmp), "-", "-l", "rus", "--psm", "6"],
-                       capture_output=True)
-    dst.write_text(r.stdout.decode("utf-8", "replace"), encoding="utf-8")
+    try:
+        dst.write_text(tess.text_only(tmp, "rus", "6"), encoding="utf-8")
+    except Exception as e:      # пустой файл выглядел бы прочитанной страницей
+        return f"ошибка ({type(e).__name__})"
     return "обработан"
 
 
@@ -94,6 +95,9 @@ def main():
         f.unlink()
     work.rmdir()
     print("итог: " + ", ".join(f"{k} — {v}" for k, v in sorted(tally.items())))
+    errors = sum(v for k, v in tally.items() if k.startswith("ошибка"))
+    if errors:
+        sys.exit(f"не прочитано страниц: {errors} — повторный запуск дочитает")
 
 
 if __name__ == "__main__":

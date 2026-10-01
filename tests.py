@@ -15,6 +15,16 @@ from eval import evaluate as evaluate_ocr, load_corpus as load_ocr_corpus
 from audit import (validate_box, validate_meta, validate_quality,
                    validate_verdict)
 from surnamefind.search import find_in_text, stem_query
+import docstore
+import ocr_pages
+import quality
+import tess
+import run as pipeline
+import stripes
+from audit import stripes_unproven, validate_stripes_marker
+import verdict
+from audit import validate_evidence
+from find import weak_pages_unmentioned
 
 # (текст, должно ли найтись)
 CASES_KUZNETSOV = [
@@ -74,12 +84,14 @@ def main():
            + pagelist_suite() + bigscan_suite() + thumbs_suite()
            + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
-           + events_suite() + registry_suite() + corpus_suite() + audit_suite())
+           + events_suite() + registry_suite() + corpus_suite() + audit_suite()
+           + tess_suite() + queue_run_suite() + stripes_suite()
+           + verdict_suite())
     bad += ocr_eval_suite()
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17 + 16 + 17 + 38)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -1114,6 +1126,511 @@ def boxes_suite():
             ("и координаты при ней",
              f"data-box='{','.join(str(v) for v in kept.get('box', []))}'"
              in cell)]:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def tess_suite():
+    import json
+    import pathlib
+    import shutil
+    import subprocess
+    import tempfile
+    from types import SimpleNamespace
+    print("\nодин проход Tesseract:")
+    tsv = ("level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop"
+           "\twidth\theight\tconf\ttext\n"
+           "1\t1\t0\t0\t0\t0\t0\t0\t10\t10\t-1\t\n"
+           "5\t1\t1\t1\t1\t1\t0\t0\t5\t5\t90.0\tКазакъ\n"
+           "5\t1\t1\t1\t1\t2\t0\t0\t5\t5\t50.0\tИванъ\n"
+           "5\t1\t1\t1\t1\t3\t0\t0\t5\t5\t-1\t \n")
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append((cmd, kw))
+        base = pathlib.Path(cmd[2])
+        base.with_suffix(".txt").write_text("Казакъ Иванъ\n", encoding="utf-8")
+        base.with_suffix(".tsv").write_text(tsv, encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    def crash_run(cmd, **kw):
+        return SimpleNamespace(returncode=1, stdout=b"", stderr=b"Error boom")
+
+    def raises(fn, *args):
+        try:
+            fn(*args)
+        except Exception as e:
+            return type(e).__name__
+        return None
+
+    text, conf, words = tess.recognize("p0001.jpg", "rus", 6, fake_run)
+    old_root = docstore.ROOT
+    old_recognize = tess.recognize
+    tmp = tempfile.TemporaryDirectory()
+    docstore.ROOT = pathlib.Path(tmp.name)
+    try:
+        d = docstore.ROOT / "bv0000903"
+        (d / "scans").mkdir(parents=True)
+        (d / "ocr").mkdir()
+        scans = []
+        for n in (1, 2, 3):
+            f = d / "scans" / f"p{n:04d}.jpg"
+            f.write_bytes(b"x")
+            scans.append(f)
+
+        tess.recognize = lambda img, lang, psm, run=None: (
+            ("Текст страницы\n", 71.5, 120))
+        n1, stat1, err1 = ocr_pages.run((scans[0], d / "ocr/p0001.txt", "rus", "6"))
+        written = ((d / "ocr/p0001.txt").read_text(encoding="utf-8")
+                   if (d / "ocr/p0001.txt").exists() else None)
+        leftover = (d / "ocr/p0001.part").exists()
+        n1b, stat1b, err1b = ocr_pages.run(
+            (scans[0], d / "ocr/p0001.txt", "rus", "6"))
+
+        def boom(img, lang, psm, run=None):
+            raise tess.TesseractError("упал")
+        tess.recognize = boom
+        n2, stat2, err2 = ocr_pages.run((scans[1], d / "ocr/p0002.txt", "rus", "6"))
+        failed_left = (d / "ocr/p0002.txt").exists() or (d / "ocr/p0002.part").exists()
+
+        ocr_pages.save_stats(d, "rus", "6", {"1": {"conf": 71.5, "words": 120}})
+        same = ocr_pages.load_stats(d, "rus", "6")
+        other_psm = ocr_pages.load_stats(d, "rus", "4")
+        (d / ocr_pages.STATS).write_text("{не json", encoding="utf-8")
+        broken = ocr_pages.load_stats(d, "rus", "6")
+
+        # замер: страница 1 из статистики, 2 и 3 — распознаются
+        ocr_pages.save_stats(d, "rus", "6", {"1": {"conf": 71.5, "words": 120}})
+        measured = []
+
+        def measure_fake(img, lang, psm, run=None):
+            measured.append(img.name)
+            return "", 40.0, 10
+        tess.recognize = measure_fake
+        stats, reused = quality.measure(scans, "6", d, 2)
+        measured_all = sorted(measured)
+        measured.clear()
+        quality.measure(scans, "6", d, 2, remeasure=True)
+        remeasured = sorted(measured)
+        tess.recognize = boom
+        try:
+            quality.measure(scans, "6", d, 2, remeasure=True)
+            exited = False
+        except SystemExit as e:
+            exited = "стр. 1, 2, 3" in str(e)
+        tess.recognize = old_recognize
+
+        real = None
+        if shutil.which("tesseract"):
+            img = pathlib.Path(__file__).parent / "bench" / "p020_150.jpg"
+            plain = subprocess.run(
+                ["tesseract", str(img), "-", "-l", "rus", "--psm", "6"],
+                capture_output=True, text=True).stdout
+            real_text, _, real_words = tess.recognize(img, "rus", 6)
+            real = real_text == plain and real_words > 0
+    finally:
+        tess.recognize = old_recognize
+        docstore.ROOT = old_root
+        tmp.cleanup()
+
+    checks = [
+        ("уверенность — среднее по словам без служебных строк",
+         parse_ok(tess.parse_tsv(tsv))),
+        ("страница без слов даёт нули", tess.parse_tsv("level\ttext\n") == (0.0, 0)),
+        ("текст и статистика из одного вызова",
+         text == "Казакъ Иванъ\n" and conf == 70.0 and words == 2
+         and len(calls) == 1),
+        ("tesseract просят сразу txt и tsv", calls[0][0][-2:] == ["txt", "tsv"]),
+        ("потоки OpenMP ограничены, срок задан",
+         calls[0][1]["env"]["OMP_THREAD_LIMIT"] == "1"
+         and calls[0][1]["timeout"] == tess.TIMEOUT),
+        ("упавший tesseract — ошибка, а не пустой текст",
+         raises(tess.recognize, "p.jpg", "rus", 6, crash_run) == "TesseractError"),
+        ("и в режиме «только текст»",
+         raises(tess.text_only, "p.jpg", "rus", 6, crash_run) == "TesseractError"),
+        ("страница записана вместе со статистикой",
+         n1 == 1 and stat1 == {"conf": 71.5, "words": 120} and err1 is None
+         and written == "Текст страницы\n" and not leftover),
+        ("готовая страница пропускается", (stat1b, err1b) == (None, None)),
+        ("упавшая страница ошибка, файла нет",
+         n2 == 2 and stat2 is None and "упал" in err2 and not failed_left),
+        ("статистика того же режима читается",
+         same == {"1": {"conf": 71.5, "words": 120}}),
+        ("статистика чужого режима не годится", other_psm == {}),
+        ("битая статистика — как её нет", broken == {}),
+        ("замер берёт готовое и дочитывает остальное",
+         measured_all == ["p0002.jpg", "p0003.jpg"] and reused == 1
+         and [x[0] for x in stats] == [1, 2, 3]),
+        ("--remeasure распознаёт всё заново",
+         remeasured == ["p0001.jpg", "p0002.jpg", "p0003.jpg"]),
+        ("сбой замера не пишет частичный итог", exited),
+    ]
+    if real is None:
+        checks.append(("реальный tesseract: пропущено, его нет", True))
+    else:
+        checks.append(("реальный tesseract: текст как при обычном вызове", real))
+    bad = 0
+    for label, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def queue_run_suite():
+    import json
+    import pathlib
+    import tempfile
+    import threading
+    from types import SimpleNamespace
+    print("\nочередь в run.py:")
+    rec = lambda i: {"id": i, "url": f"https://x/{i}/view/", "title": i}
+    docs = {"в_работе": [rec("bv1"), rec("bv2")],
+            "очередь": {"1_приказы": [rec("bv3")],
+                        "2_казачество": [rec("bv4"), rec("bv5")],
+                        "4_газеты": [rec("pn1"), rec("pn2")]}}
+    everything = lambda ident, surnames: True
+    ids = lambda picked: [r["id"] for r in picked]
+
+    # Реальный диск: готовый документ и документ без поиска нужной фамилии.
+    old_root = docstore.ROOT
+    tmp = tempfile.TemporaryDirectory()
+    docstore.ROOT = pathlib.Path(tmp.name)
+    try:
+        ready = docstore.ROOT / "bv0000911"
+        (ready / "ocr").mkdir(parents=True)
+        for n in (1, 2):
+            (ready / "ocr" / f"p{n:04d}.txt").write_text("текст", encoding="utf-8")
+        docstore.save_meta("bv0000911", pages=2, url="u", title="Том")
+        half = docstore.ROOT / "bv0000912"
+        (half / "ocr").mkdir(parents=True)
+        (half / "ocr" / "p0001.txt").write_text("текст", encoding="utf-8")
+        docstore.save_meta("bv0000912", pages=2, url="u", title="Том")
+        no_quality = pipeline.is_processed("bv0000911")
+        (ready / "quality.json").write_text("{}", encoding="utf-8")
+        processed = pipeline.is_processed("bv0000911")
+        half_done = pipeline.is_processed("bv0000912")
+        none_yet = pipeline.is_processed("bv0000999")
+        (ready / "searches.jsonl").write_text(json.dumps(
+            {"type": "search", "surname": "Кармазинъ"}) + "\n", encoding="utf-8")
+        skip_known = pipeline.needs_work("bv0000911", ["Кармазинъ"])
+        need_other = pipeline.needs_work("bv0000911", ["Кармазинъ", "Могучевъ"])
+        skip_plain = pipeline.needs_work("bv0000911", [])
+    finally:
+        docstore.ROOT = old_root
+        tmp.cleanup()
+
+    # Конвейер: скачивание следующего должно идти, пока читается этот.
+    started = {"bv2": threading.Event()}
+    order, lock = [], threading.Lock()
+
+    def fetch(a, base):
+        with lock:
+            order.append("fetch " + base)
+        if base == "bv2":
+            started["bv2"].set()
+        if base == "bad":
+            raise pipeline.StepFailed("упал")
+
+    overlapped = []
+
+    def process(a, base):
+        if base == "bv1":
+            overlapped.append(started["bv2"].wait(5))
+        with lock:
+            order.append("process " + base)
+
+    args = SimpleNamespace(background=False)
+    results = pipeline.run_batch(args, ["bv1", "bv2"], fetch, process)
+    order.clear()
+    mixed = pipeline.run_batch(args, ["bad", "bv3"], fetch, process)
+
+    checks = [
+        ("сначала «в работе», потом очереди по порядку",
+         ids(pipeline.pick_next(4, docs, (), None, everything))
+         == ["bv1", "bv2", "bv3", "bv4"]),
+        ("берётся не больше N",
+         len(pipeline.pick_next(2, docs, (), None, everything)) == 2),
+        ("--queue газеты берёт только газеты",
+         ids(pipeline.pick_next(5, docs, (), "газеты", everything))
+         == ["pn1", "pn2"]),
+        ("готовое пропускается, берётся следующее",
+         ids(pipeline.pick_next(
+             2, docs, (), None, lambda i, s: i not in ("bv1", "bv3")))
+         == ["bv2", "bv4"]),
+        ("очереди не хватает — берётся сколько есть",
+         len(pipeline.pick_next(50, docs, (), None, everything)) == 7),
+        ("без quality.json документ не обработан", not no_quality),
+        ("целиком распознанный и измеренный — обработан", processed),
+        ("половина страниц — не обработан", not half_done),
+        ("неизвестный документ — не обработан", not none_yet),
+        ("обработанный и найденный не берётся", not skip_known),
+        ("новая фамилия возвращает документ в работу", need_other),
+        ("без фамилий обработанный не берётся", not skip_plain),
+        ("скачивание следующего началось до конца этого",
+         overlapped == [True]),
+        ("оба документа обработаны", results == {"bv1": None, "bv2": None}),
+        ("упавшее скачивание не останавливает соседа",
+         mixed["bad"] is not None and mixed["bv3"] is None
+         and "process bv3" in order),
+        ("у упавшего нет шагов обработки", "process bad" not in order),
+    ]
+    bad = 0
+    for label, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def parse_ok(result):
+    conf, words = result
+    return abs(conf - 70.0) < 1e-9 and words == 2
+
+
+def stripes_suite():
+    import json
+    import pathlib
+    import tempfile
+    from types import SimpleNamespace
+    print("\nсплошной проход лентами:")
+    boxes = stripes.stripe_boxes(1000)
+    ident = "pn0000901"
+    old_root = docstore.ROOT
+    tmp = tempfile.TemporaryDirectory()
+    docstore.ROOT = pathlib.Path(tmp.name)
+    try:
+        d = docstore.ROOT / ident
+        (d / "scans").mkdir(parents=True)
+        for n in (1, 2, 3):
+            (d / "scans" / f"p{n:04d}.jpg").write_bytes(b"x" * 2048)
+        docstore.save_meta(ident, url="https://x/" + ident, pages=3, dpi=400)
+        calls = []
+
+        def reader(scan, lang):
+            calls.append(scan.name)
+            if scan.name == "p0002.jpg":
+                raise RuntimeError("tesseract: код 1")
+            return f"казакъ Кармазинъ {scan.name}\nКарась"
+
+        first = stripes.process(ident, [1, 2, 3], "rus", 2, reader)
+        partial_marker = stripes.write_marker(ident, "rus")
+        marker_early = (d / "stripes.json").exists()
+        calls.clear()
+        second = stripes.process(ident, [1, 2, 3], "rus", 2, reader)
+        failed_again = sorted(second[2])
+        # страница 2 снова падает; починим читатель и дочитаем её одну
+        stripes.process(ident, [1, 2, 3], "rus", 2,
+                        lambda scan, lang: "Карась")
+        marker = stripes.write_marker(ident, "rus")
+        texts = {n: (d / "ocr_stripes" / f"p{n:04d}.txt").read_text(encoding="utf-8")
+                 for n in (1, 2, 3)}
+        words = stripes.words_by_prefix(texts, ["кар"])["кар"]
+
+        def run_ok(cmd, **kw):
+            return SimpleNamespace(returncode=0, stdout="текст".encode(),
+                                   stderr=b"")
+
+        def run_bad(cmd, **kw):
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b"boom")
+
+        from PIL import Image
+        im = Image.new("L", (50, 20), 255)
+        try:
+            stripes.read_stripe(im, "rus", tmp.name, run_bad)
+            bad_raises = False
+        except RuntimeError:
+            bad_raises = True
+        row = {"date": "2026-10-05T10:00:00+04:00",
+               "verdict": "ОГОВОРКА: сплошным проходом вертикальными лентами"}
+        checks = [
+            ("ленты покрывают лист от края до края",
+             boxes[0][0] == 0 and boxes[-1][1] == 1000),
+            ("ширина ленты — пятая часть, шаг — десятая",
+             boxes[0] == (0, 200) and boxes[1][0] == 100),
+            ("ленты идут внахлёст без дыр",
+             all(b[0] < a[1] for a, b in zip(boxes, boxes[1:]))),
+            ("узкий лист не зацикливает разбиение",
+             stripes.stripe_boxes(3)[-1][1] == 3),
+            ("упавшая страница не роняет остальные",
+             first[0] == 2 and list(first[2]) == [2]),
+            ("пока страница не прочитана, маркера нет",
+             partial_marker is None and not marker_early),
+            ("повтор не перечитывает готовое",
+             sorted(calls) == ["p0002.jpg"] and second[1] == 2),
+            ("ошибка страницы видна и при повторе", failed_again == [2]),
+            ("после дочитывания документ отмечен целиком",
+             marker is not None and marker["pages"] == marker["of"] == 3),
+            ("выписка слов по началу собирает страницы",
+             sorted(words.get("карась", ())) == [1, 2, 3]),
+            ("упавший tesseract — ошибка, а не пустая лента", bad_raises),
+            ("успешный tesseract отдаёт текст",
+             stripes.read_stripe(im, "rus", tmp.name, run_ok) == "текст"),
+            ("целый маркер проходит аудит",
+             validate_stripes_marker(marker, 3) == []),
+            ("неполный маркер — ошибка",
+             bool(validate_stripes_marker({"pages": 2, "of": 3}, 3))),
+            ("новый вердикт без маркера — предупреждение",
+             stripes_unproven(row, False)),
+            ("с маркером предупреждения нет", not stripes_unproven(row, True)),
+            ("прежний вердикт не трогаем",
+             not stripes_unproven({**row, "date": "2026-09-30T10:00:00+04:00"},
+                                  False)),
+        ]
+    finally:
+        docstore.ROOT = old_root
+        tmp.cleanup()
+    bad = 0
+    for label, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def verdict_suite():
+    import json
+    import pathlib
+    import tempfile
+    from types import SimpleNamespace
+    print("\nчерновик вердикта:")
+    ok_doc, bad_doc = "bv0000901", "bv0000902"
+    dismissed = {"кармазин": {"кармалин": "другая фамилия"}}
+    quality = {"threshold": 60.0, "pages": {"1": 52.6, "2": 71.0, "3": 50.9},
+               "weak": [1, 3]}
+    old_root = docstore.ROOT
+    tmp = tempfile.TemporaryDirectory()
+    docstore.ROOT = pathlib.Path(tmp.name)
+    try:
+        def make(ident, texts):
+            d = docstore.ROOT / ident
+            (d / "ocr").mkdir(parents=True)
+            for n, text in enumerate(texts, 1):
+                (d / "ocr" / f"p{n:04d}.txt").write_text(text, encoding="utf-8")
+            docstore.save_meta(ident, url=f"https://x/{ident}",
+                               title="Газета", pages=len(texts), dpi=400)
+            (d / "quality.json").write_text(json.dumps(quality), encoding="utf-8")
+
+        make(ok_doc, ["казакъ Кармалинъ Иванъ", "объявленіе о продажѣ",
+                      "стихотвореніе"])
+        make(bad_doc, ["урядникъ Кармазинъ Яковъ", "объявленіе", "стихи"])
+        ctx = verdict.gather(ok_doc, "Кармазинъ", dismissed=dismissed)
+        bad_ctx = verdict.gather(bad_doc, "Кармазинъ", dismissed=dismissed)
+        make("bv0000903", ["станица въ Мусскомъ округѣ", "Мирскому сходу",
+                           "стихи"])
+        place_ctx = verdict.gather("bv0000903", "Кармазинъ", dismissed=dismissed)
+        text = verdict.build_text(ctx)
+
+        def exits(fn, *args):
+            try:
+                fn(*args)
+            except SystemExit:
+                return True
+            return False
+        hit = lambda cost, partial=False, raw="Кармалинъ": SimpleNamespace(
+            cost=cost, partial=partial, raw=raw)
+
+        checks = [
+            ("искажённое слово из списка отсеяно",
+             verdict.classify(hit(2.0), {"кармалин": "x"}) == ("dismissed", "x")),
+            ("точное совпадение не отсеивается даже из списка",
+             verdict.classify(hit(0), {"кармалин": "x"})[0] == "exact"),
+            ("обрывок переноса не отсеивается",
+             verdict.classify(hit(0.5, True), {"кармалин": "x"})[0] == "partial"),
+            ("слово не из списка уходит человеку",
+             verdict.classify(hit(2.0), {})[0] == "review"),
+            ("в чистом документе всё отсеяно", not verdict.unresolved(ctx)),
+            ("чистый документ можно записать", verdict.problems(ctx) == []),
+            ("в тексте слабые страницы с оценками",
+             "стр. 1 — 52,6, стр. 3 — 50,9" in text),
+            ("порог и число слабых страниц в тексте",
+             "ниже порога 60: 2 страницы" in text),
+            ("отсеянное названо вместе с причиной",
+             "«Кармалинъ» (другая фамилия; стр. 1)" in text),
+            ("места названы непросмотренными",
+             "Места найдены не были" in text),
+            ("точная Кармазинъ блокирует автозапись",
+             any("решает человек" in p for p in verdict.problems(bad_ctx, "x"))),
+            ("без разбора неотсеянное блокирует",
+             any("--note" in p for p in verdict.problems(
+                 {**ctx, "place_hits": {"Ровеньки": [2]}}))),
+            ("с --note место можно записать",
+             verdict.problems({**ctx, "place_hits": {"Ровеньки": [2]}},
+                              "стр. 2 — другая Ровеньки") == []),
+            ("без stripes.json о лентах ни слова",
+             "сплошной проход" not in text and ctx["stripes"] is None),
+            ("со stripes.json проход лентами назван в оговорке",
+             "сплошной проход вертикальными лентами (3 из 3"
+             in verdict.coverage_text({**ctx, "stripes": {"pages": 3, "of": 3}})),
+            ("искажённое место («Мусскомъ») найдено, шум («Мирскому») нет",
+             place_ctx["place_hits"] == {"Миусский округ": [1]}),
+            ("заметка к документу без неразобранного отклоняется",
+             any("разбирать нечего" in p for p in verdict.problems(ctx, "x"))),
+            ("дореформенное в заметке ловится до записи",
+             any("дореформенное" in p for p in verdict.problems(
+                 {**ctx, "place_hits": {"Ровеньки": [2]}}, "стр. 2 — Ровенекъ"))),
+            ("заметка привязывается к своему документу",
+             verdict.parse_notes([f"{bad_doc}=стр. 1"], [ok_doc, bad_doc])
+             == {bad_doc: "стр. 1"}),
+            ("один документ — заметка без имени",
+             verdict.parse_notes(["стр. 1"], [ok_doc]) == {ok_doc: "стр. 1"}),
+            ("несколько документов — заметка без имени отклоняется",
+             exits(verdict.parse_notes, ["стр. 1"], [ok_doc, bad_doc])),
+            ("обрывок с чужим продолжением отсеивается",
+             verdict.continuation_fits(
+                 SimpleNamespace(raw="Мо-", context="село Мо- рушка, поле"),
+                 "могучев", [], 3.0) is False),
+            ("обрыв с настоящим продолжением остаётся",
+             verdict.continuation_fits(
+                 SimpleNamespace(raw="Мо-", context="казакъ Мо- гучевъ Иванъ"),
+                 "могучев", [], 3.0) is True),
+            ("нечитаемое продолжение — судить не по чему",
+             verdict.continuation_fits(
+                 SimpleNamespace(raw="Могу-", context="казакъ Могу- 4:65 и"),
+                 "могучев", [], 3.0) is None),
+            ("склонение: 1 страница, 2 страницы, 5 страниц",
+             [verdict.plural(n, "а", "б", "в") for n in (1, 2, 5, 11, 22)]
+             == ["а", "б", "в", "в", "б"]),
+        ]
+
+        written = verdict.record(ctx)
+        rows = docstore.read_log(ok_doc)
+        row = [r for r in rows if r["type"] == "verdict"][-1]
+        errors, warnings = validate_verdict(row, 3, {})
+        ev_errors, ev_warnings = validate_evidence(row["evidence"], 3, quality)
+        drift = {**quality, "weak": [1]}
+        checks += [
+            ("вердикт записан со status absent",
+             row["status"] == "absent" and row["verdict"] == written),
+            ("вердикт проходит аудит", (errors, warnings) == ([], [])),
+            ("evidence проходит аудит", (ev_errors, ev_warnings) == ([], [])),
+            ("перед вердиктом записан поиск",
+             [r["type"] for r in rows] == ["search", "verdict"]),
+            ("расхождение с quality.json — предупреждение",
+             bool(validate_evidence(row["evidence"], 3, drift)[1])),
+            ("у не последнего вердикта расхождение не предупреждает",
+             validate_evidence(row["evidence"], 3, drift, current=False)[1] == []),
+            ("слой вне списка — ошибка",
+             bool(validate_evidence({**row["evidence"],
+                                     "layers": {"ocr_x": 1}}, 3)[0])),
+            ("слабая страница вне тома — ошибка",
+             bool(validate_evidence({**row["evidence"],
+                                     "weak_pages": {"9": 40.0}}, 3)[0])),
+            ("молчание о слабых страницах ловится",
+             weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА. Всё чисто.") == [1, 3]),
+            ("названная страница снимает замечание",
+             weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА. Стр. 3 — шум.") == []),
+            ("упоминание порога снимает замечание",
+             weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА, слабые страницы разобраны") == []),
+            ("дата и номер выпуска не считаются названной страницей",
+             weak_pages_unmentioned(
+                 ok_doc, "НЕ НАЙДЕНА. Газета, 3 августа 1885, № 1.") == [1, 3]),
+            ("полосы диапазоном: «полосы 2–3» называет стр. 3",
+             weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА. Полосы 2–3 — шум.") == []),
+        ]
+    finally:
+        docstore.ROOT = old_root
+        tmp.cleanup()
+    bad = 0
+    for label, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad

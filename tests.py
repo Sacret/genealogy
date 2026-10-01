@@ -15,6 +15,9 @@ from eval import evaluate as evaluate_ocr, load_corpus as load_ocr_corpus
 from audit import (validate_box, validate_meta, validate_quality,
                    validate_verdict)
 from surnamefind.search import find_in_text, stem_query
+import docstore
+import stripes
+from audit import stripes_unproven, validate_stripes_marker
 
 # (текст, должно ли найтись)
 CASES_KUZNETSOV = [
@@ -74,12 +77,13 @@ def main():
            + pagelist_suite() + bigscan_suite() + thumbs_suite()
            + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
-           + events_suite() + registry_suite() + corpus_suite() + audit_suite())
+           + events_suite() + registry_suite() + corpus_suite() + audit_suite()
+           + stripes_suite())
     bad += ocr_eval_suite()
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -1114,6 +1118,104 @@ def boxes_suite():
             ("и координаты при ней",
              f"data-box='{','.join(str(v) for v in kept.get('box', []))}'"
              in cell)]:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def stripes_suite():
+    import json
+    import pathlib
+    import tempfile
+    from types import SimpleNamespace
+    print("\nсплошной проход лентами:")
+    boxes = stripes.stripe_boxes(1000)
+    ident = "pn0000901"
+    old_root = docstore.ROOT
+    tmp = tempfile.TemporaryDirectory()
+    docstore.ROOT = pathlib.Path(tmp.name)
+    try:
+        d = docstore.ROOT / ident
+        (d / "scans").mkdir(parents=True)
+        for n in (1, 2, 3):
+            (d / "scans" / f"p{n:04d}.jpg").write_bytes(b"x" * 2048)
+        docstore.save_meta(ident, url="https://x/" + ident, pages=3, dpi=400)
+        calls = []
+
+        def reader(scan, lang):
+            calls.append(scan.name)
+            if scan.name == "p0002.jpg":
+                raise RuntimeError("tesseract: код 1")
+            return f"казакъ Кармазинъ {scan.name}\nКарась"
+
+        first = stripes.process(ident, [1, 2, 3], "rus", 2, reader)
+        partial_marker = stripes.write_marker(ident, "rus")
+        marker_early = (d / "stripes.json").exists()
+        calls.clear()
+        second = stripes.process(ident, [1, 2, 3], "rus", 2, reader)
+        failed_again = sorted(second[2])
+        # страница 2 снова падает; починим читатель и дочитаем её одну
+        stripes.process(ident, [1, 2, 3], "rus", 2,
+                        lambda scan, lang: "Карась")
+        marker = stripes.write_marker(ident, "rus")
+        texts = {n: (d / "ocr_stripes" / f"p{n:04d}.txt").read_text(encoding="utf-8")
+                 for n in (1, 2, 3)}
+        words = stripes.words_by_prefix(texts, ["кар"])["кар"]
+
+        def run_ok(cmd, **kw):
+            return SimpleNamespace(returncode=0, stdout="текст", stderr="")
+
+        def run_bad(cmd, **kw):
+            return SimpleNamespace(returncode=1, stdout="", stderr="boom")
+
+        from PIL import Image
+        im = Image.new("L", (50, 20), 255)
+        try:
+            stripes.read_stripe(im, "rus", tmp.name, run_bad)
+            bad_raises = False
+        except RuntimeError:
+            bad_raises = True
+        row = {"date": "2026-10-05T10:00:00+04:00",
+               "verdict": "ОГОВОРКА: сплошным проходом вертикальными лентами"}
+        checks = [
+            ("ленты покрывают лист от края до края",
+             boxes[0][0] == 0 and boxes[-1][1] == 1000),
+            ("ширина ленты — пятая часть, шаг — десятая",
+             boxes[0] == (0, 200) and boxes[1][0] == 100),
+            ("ленты идут внахлёст без дыр",
+             all(b[0] < a[1] for a, b in zip(boxes, boxes[1:]))),
+            ("узкий лист не зацикливает разбиение",
+             stripes.stripe_boxes(3)[-1][1] == 3),
+            ("упавшая страница не роняет остальные",
+             first[0] == 2 and list(first[2]) == [2]),
+            ("пока страница не прочитана, маркера нет",
+             partial_marker is None and not marker_early),
+            ("повтор не перечитывает готовое",
+             sorted(calls) == ["p0002.jpg"] and second[1] == 2),
+            ("ошибка страницы видна и при повторе", failed_again == [2]),
+            ("после дочитывания документ отмечен целиком",
+             marker is not None and marker["pages"] == marker["of"] == 3),
+            ("выписка слов по началу собирает страницы",
+             sorted(words.get("карась", ())) == [1, 2, 3]),
+            ("упавший tesseract — ошибка, а не пустая лента", bad_raises),
+            ("успешный tesseract отдаёт текст",
+             stripes.read_stripe(im, "rus", tmp.name, run_ok) == "текст"),
+            ("целый маркер проходит аудит",
+             validate_stripes_marker(marker, 3) == []),
+            ("неполный маркер — ошибка",
+             bool(validate_stripes_marker({"pages": 2, "of": 3}, 3))),
+            ("новый вердикт без маркера — предупреждение",
+             stripes_unproven(row, False)),
+            ("с маркером предупреждения нет", not stripes_unproven(row, True)),
+            ("прежний вердикт не трогаем",
+             not stripes_unproven({**row, "date": "2026-09-30T10:00:00+04:00"},
+                                  False)),
+        ]
+    finally:
+        docstore.ROOT = old_root
+        tmp.cleanup()
+    bad = 0
+    for label, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad

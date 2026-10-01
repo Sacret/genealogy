@@ -229,6 +229,36 @@ def validate_verdict(row, total, people, current=True):
     return errors, warnings
 
 
+# Вердикт, утверждающий «сплошной проход лентами», должен опираться на
+# stripes.json: сам слой в репозиторий не идёт. Прежние вердикты (их
+# сотни) пошли без маркера, и их это не касается — только новые.
+STRIPES_CLAIM = re.compile(r"сплошн\w*\s+проход", re.I)
+STRIPES_MARKER_SINCE = "2026-10-02"
+
+
+def validate_stripes_marker(marker, total):
+    errors = []
+    for field in ("pages", "of"):
+        value = marker.get(field)
+        if not isinstance(value, int) or isinstance(value, bool):
+            errors.append(f"stripes.json: {field} должен быть целым числом")
+    if not errors:
+        if marker["of"] != total:
+            errors.append(f"stripes.json: of должен быть равен {total}")
+        if marker["pages"] != marker["of"]:
+            errors.append("stripes.json: прочитано не всё "
+                          f"({marker['pages']} из {marker['of']}), маркер "
+                          "пишется только по целому документу")
+    return errors
+
+
+def stripes_unproven(row, marker_ok, current=True):
+    """Предупреждение, если новый вердикт ссылается на непроверяемый проход."""
+    return (current and not marker_ok
+            and str(row.get("date", "")) >= STRIPES_MARKER_SINCE
+            and bool(STRIPES_CLAIM.search(row.get("verdict", ""))))
+
+
 def validate_search(row, total):
     errors = []
     fields = ("date", "surname", "stem", "threshold", "document", "url",
@@ -396,6 +426,16 @@ def audit_project(root=ROOT):
         else:
             report.warn(quality_path, "надёжность OCR не измерена")
 
+        marker_path = folder / "stripes.json"
+        marker_ok = False
+        if marker_path.exists():
+            marker = read_json(marker_path, report)
+            if marker is not None:
+                problems = validate_stripes_marker(marker, total)
+                marker_ok = not problems
+                for message in problems:
+                    report.error(marker_path, message)
+
         log_path = folder / "searches.jsonl"
         rows = read_jsonl(log_path, report) if log_path.exists() else []
         log_rows += len(rows)
@@ -418,6 +458,10 @@ def audit_project(root=ROOT):
                     report.error(where, message)
                 for message in warnings:
                     report.warn(where, message)
+                if stripes_unproven(row, marker_ok, current):
+                    report.warn(where, "вердикт ссылается на сплошной проход "
+                                "лентами, а stripes.json нет: stripes.py "
+                                f"{ident}")
             else:
                 report.error(where, f"неизвестный type {kind!r}")
             if row.get("date") and not validate_date(row["date"]):

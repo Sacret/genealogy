@@ -28,6 +28,7 @@
   --maybe-bg: #e0eaf3; --maybe-ink: #2c5578;
   --no-bg: #ece9e5; --no-ink: #6b6560;
   --wait-bg: #f7ecd8; --wait-ink: #8a5f18;
+  --q-bg: #ffe08a;
   --bar: rgba(250, 248, 245, .86);
 }
 @media (prefers-color-scheme: dark) {
@@ -38,10 +39,13 @@
     --maybe-bg: #1b2b39; --maybe-ink: #8fbede;
     --no-bg: #2a2622; --no-ink: #9a918a;
     --wait-bg: #3a2e18; --wait-ink: #e0b463;
+    --q-bg: #6b5212;
     --bar: rgba(23, 21, 19, .88);
   }
 }
 * { box-sizing: border-box; }
+/* Набранное в поле поиска подсвечивается в видимых делах — см. lightUp. */
+::highlight(q) { background: var(--q-bg); color: inherit; }
 body {
   margin: 0; padding: 40px 24px 80px; background: var(--bg); color: var(--ink);
   font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -2804,6 +2808,7 @@ function apply() {
       }
     }
   });
+  lightUp(q);
   // Сколько осталось — и строк, и документов сразу: одна фамилия тянется
   // через десятки книг, и «12 поисков» само по себе не говорит, много это
   // документов или один. Пустой ответ называется словами: без надписи
@@ -2828,6 +2833,35 @@ function apply() {
       delete det.dataset.was;
     }
   });
+}
+// Набранное в поле подсвечивается там, где его видно: в заголовке,
+// номере дела, фамилии, страницах, тексте вердикта. Подсветка — через
+// CSS Highlight API, а не обёртку <mark>: текст карточек не меняется, и
+// keys() по-прежнему читает заголовок как есть. Браузер без этого API
+// просто фильтрует без подсветки. Совпадения ищутся в каждом текстовом
+// узле отдельно — слово, разорванное тегами, не подсветится, но
+// фамилии и названия в разметке цельные.
+function lightUp(q) {
+  if (!window.CSS || !CSS.highlights || typeof Highlight === 'undefined') return;
+  CSS.highlights.delete('q');
+  if (!q) return;
+  const hl = new Highlight();
+  document.querySelectorAll('.doc, .nil-doc').forEach(d => {
+    if (d.style.display === 'none') return;
+    const walk = document.createTreeWalker(d, NodeFilter.SHOW_TEXT);
+    for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+      const p = t.parentElement;
+      if (p.closest('[hidden], .hidden')) continue;
+      const low = t.data.toLowerCase();
+      for (let i = low.indexOf(q); i >= 0; i = low.indexOf(q, i + q.length)) {
+        const r = new Range();
+        r.setStart(t, i);
+        r.setEnd(t, i + q.length);
+        hl.add(r);
+      }
+    }
+  });
+  if (hl.size) CSS.highlights.set('q', hl);
 }
 // Фильтр живёт в адресе — ?q=фамилия&s=ok,maybe, — чтобы выборку можно
 // было переслать ссылкой и открыть ровно на ней. Пишется replaceState, а

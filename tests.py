@@ -91,7 +91,7 @@ def main():
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17 + 16 + 17 + 36)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17 + 16 + 17 + 38)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -1427,10 +1427,11 @@ def stripes_suite():
         words = stripes.words_by_prefix(texts, ["кар"])["кар"]
 
         def run_ok(cmd, **kw):
-            return SimpleNamespace(returncode=0, stdout="текст", stderr="")
+            return SimpleNamespace(returncode=0, stdout="текст".encode(),
+                                   stderr=b"")
 
         def run_bad(cmd, **kw):
-            return SimpleNamespace(returncode=1, stdout="", stderr="boom")
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b"boom")
 
         from PIL import Image
         im = Image.new("L", (50, 20), 255)
@@ -1554,6 +1555,11 @@ def verdict_suite():
             ("с --note место можно записать",
              verdict.problems({**ctx, "place_hits": {"Ровеньки": [2]}},
                               "стр. 2 — другая Ровеньки") == []),
+            ("без stripes.json о лентах ни слова",
+             "сплошной проход" not in text and ctx["stripes"] is None),
+            ("со stripes.json проход лентами назван в оговорке",
+             "сплошной проход вертикальными лентами (3 из 3"
+             in verdict.coverage_text({**ctx, "stripes": {"pages": 3, "of": 3}})),
             ("искажённое место («Мусскомъ») найдено, шум («Мирскому») нет",
              place_ctx["place_hits"] == {"Миусский округ": [1]}),
             ("заметка к документу без неразобранного отклоняется",

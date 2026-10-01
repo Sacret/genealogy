@@ -37,9 +37,12 @@ def load_stats(folder, lang, psm):
 
 
 def save_stats(folder, lang, psm, pages):
-    (folder / STATS).write_text(json.dumps(
+    # Через временное имя: файл переписывается и посреди прогона.
+    tmp = folder / (STATS + ".part")
+    tmp.write_text(json.dumps(
         {"lang": lang, "psm": str(psm), "pages": pages},
         ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(folder / STATS)
 
 
 def run(job):
@@ -94,6 +97,11 @@ def main():
                 stats[str(n)] = stat
             if i % 50 == 0:
                 print(f"  {i}/{len(jobs)}", file=sys.stderr)
+                # По ходу, а не только в конце: прерванный прогон иначе
+                # терял уверенность уже прочитанных страниц, и quality.py
+                # распознавал их второй раз.
+                if fresh:
+                    save_stats(d, a.lang, a.psm, stats)
     if stats:
         save_stats(d, a.lang, a.psm, stats)
     print(f"готово: {len(jobs)} страниц, заново распознано {fresh}, "

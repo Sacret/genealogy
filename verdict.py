@@ -144,6 +144,26 @@ def load_quality(ident):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
 
+def load_stripes(ident):
+    """Маркер сплошного прохода лентами (stripes.json) или None.
+
+    Сам слой в репозиторий не идёт и find.py его не ищет, поэтому в
+    оговорку он попадает только по целому маркеру — тому же, по которому
+    audit.py проверяет вердикты, ссылающиеся на сплошной проход.
+    """
+    path = doc_dir(ident) / "stripes.json"
+    if not path.exists():
+        return None
+    try:
+        marker = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    total = load_meta(ident).get("pages")
+    if marker.get("pages") != total or marker.get("of") != total:
+        return None
+    return marker
+
+
 def layer_counts(ident):
     """Сколько страниц прочитано в каждом слое, который ищет find.py."""
     out = {}
@@ -212,6 +232,7 @@ def gather(ident, surname, places=DEFAULT_PLACES, dismissed=None, pages=None):
         "places": [label for label, _ in places], "place_hits": place_hits,
         "place_words": place_words,
         "layers": layer_counts(ident), "quality": quality, "weak": weak,
+        "stripes": load_stripes(ident),
     }
 
 
@@ -285,6 +306,10 @@ def coverage_text(ctx):
     read = ", ".join(f"{LAYER_NAMES.get(k, k)} ({layers[k]} из {total})"
                      for k in ("ocr", *find.EXTRA_LAYERS) if k in layers)
     text = f"ОГОВОРКА О ПОЛНОТЕ: слои чтения — {read}; "
+    if ctx.get("stripes"):
+        text += (f"сплошной проход вертикальными лентами ({total} из {total}, "
+                 "stripes.json) поиском не читается — только выпиской "
+                 "stripes.py --words; ")
     weak = ctx["weak"]
     threshold = quality["threshold"] if quality else "?"
     if not weak:
@@ -356,6 +381,7 @@ def evidence(ctx, note=None):
         "threshold": ctx["quality"]["threshold"],
         "weak_pages": ctx["weak"],
         "layers": ctx["layers"],
+        "stripes": bool(ctx.get("stripes")),
         "candidates": ctx["counts"],
         "dismissed": [{"page": c["page"], "word": c["raw"]}
                       for c in ctx["candidates"] if c["kind"] == "dismissed"],

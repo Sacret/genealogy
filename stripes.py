@@ -30,9 +30,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+import tess
 from docstore import allow_big_scans, doc_dir, load_meta
 
-TIMEOUT = 300           # одна лента, секунд: зависший tesseract не должен вешать пул
 MARKER = "stripes.json"
 WORD = re.compile(r"[^\W\d_]+")
 
@@ -53,15 +53,12 @@ def read_stripe(image, lang, tmpdir, run=subprocess.run):
 
     Пустой текст от упавшего процесса выглядел бы прочитанной полосой без
     единого слова, и по такому слою «не найдена» ничего бы не значила.
+    Запуск — через tess.py, как у остальных проходов: тот же таймаут и
+    OMP_THREAD_LIMIT=1, иначе потоки пула и OpenMP мешают друг другу.
     """
     path = Path(tmpdir) / "stripe.png"
     image.save(path)
-    r = run(["tesseract", str(path), "-", "-l", lang, "--psm", "6"],
-            capture_output=True, text=True, timeout=TIMEOUT)
-    if r.returncode:
-        raise RuntimeError(f"tesseract: код {r.returncode}: "
-                           f"{(r.stderr or '').strip()[:200]}")
-    return r.stdout
+    return tess.text_only(path, lang, "6", run)
 
 
 def read_page(scan, lang, run=subprocess.run):

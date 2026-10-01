@@ -15,6 +15,8 @@ from eval import evaluate as evaluate_ocr, load_corpus as load_ocr_corpus
 from audit import (validate_box, validate_meta, validate_quality,
                    validate_verdict)
 from surnamefind.search import find_in_text, stem_query
+import docstore
+import run as pipeline
 
 # (текст, должно ли найтись)
 CASES_KUZNETSOV = [
@@ -74,12 +76,13 @@ def main():
            + pagelist_suite() + bigscan_suite() + thumbs_suite()
            + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
-           + events_suite() + registry_suite() + corpus_suite() + audit_suite())
+           + events_suite() + registry_suite() + corpus_suite() + audit_suite()
+           + queue_run_suite())
     bad += ocr_eval_suite()
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 16)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -1114,6 +1117,111 @@ def boxes_suite():
             ("и координаты при ней",
              f"data-box='{','.join(str(v) for v in kept.get('box', []))}'"
              in cell)]:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def queue_run_suite():
+    import json
+    import pathlib
+    import tempfile
+    import threading
+    from types import SimpleNamespace
+    print("\nочередь в run.py:")
+    rec = lambda i: {"id": i, "url": f"https://x/{i}/view/", "title": i}
+    docs = {"в_работе": [rec("bv1"), rec("bv2")],
+            "очередь": {"1_приказы": [rec("bv3")],
+                        "2_казачество": [rec("bv4"), rec("bv5")],
+                        "4_газеты": [rec("pn1"), rec("pn2")]}}
+    everything = lambda ident, surnames: True
+    ids = lambda picked: [r["id"] for r in picked]
+
+    # Реальный диск: готовый документ и документ без поиска нужной фамилии.
+    old_root = docstore.ROOT
+    tmp = tempfile.TemporaryDirectory()
+    docstore.ROOT = pathlib.Path(tmp.name)
+    try:
+        ready = docstore.ROOT / "bv0000911"
+        (ready / "ocr").mkdir(parents=True)
+        for n in (1, 2):
+            (ready / "ocr" / f"p{n:04d}.txt").write_text("текст", encoding="utf-8")
+        docstore.save_meta("bv0000911", pages=2, url="u", title="Том")
+        half = docstore.ROOT / "bv0000912"
+        (half / "ocr").mkdir(parents=True)
+        (half / "ocr" / "p0001.txt").write_text("текст", encoding="utf-8")
+        docstore.save_meta("bv0000912", pages=2, url="u", title="Том")
+        no_quality = pipeline.is_processed("bv0000911")
+        (ready / "quality.json").write_text("{}", encoding="utf-8")
+        processed = pipeline.is_processed("bv0000911")
+        half_done = pipeline.is_processed("bv0000912")
+        none_yet = pipeline.is_processed("bv0000999")
+        (ready / "searches.jsonl").write_text(json.dumps(
+            {"type": "search", "surname": "Кармазинъ"}) + "\n", encoding="utf-8")
+        skip_known = pipeline.needs_work("bv0000911", ["Кармазинъ"])
+        need_other = pipeline.needs_work("bv0000911", ["Кармазинъ", "Могучевъ"])
+        skip_plain = pipeline.needs_work("bv0000911", [])
+    finally:
+        docstore.ROOT = old_root
+        tmp.cleanup()
+
+    # Конвейер: скачивание следующего должно идти, пока читается этот.
+    started = {"bv2": threading.Event()}
+    order, lock = [], threading.Lock()
+
+    def fetch(a, base):
+        with lock:
+            order.append("fetch " + base)
+        if base == "bv2":
+            started["bv2"].set()
+        if base == "bad":
+            raise pipeline.StepFailed("упал")
+
+    overlapped = []
+
+    def process(a, base):
+        if base == "bv1":
+            overlapped.append(started["bv2"].wait(5))
+        with lock:
+            order.append("process " + base)
+
+    args = SimpleNamespace(background=False)
+    results = pipeline.run_batch(args, ["bv1", "bv2"], fetch, process)
+    order.clear()
+    mixed = pipeline.run_batch(args, ["bad", "bv3"], fetch, process)
+
+    checks = [
+        ("сначала «в работе», потом очереди по порядку",
+         ids(pipeline.pick_next(4, docs, (), None, everything))
+         == ["bv1", "bv2", "bv3", "bv4"]),
+        ("берётся не больше N",
+         len(pipeline.pick_next(2, docs, (), None, everything)) == 2),
+        ("--queue газеты берёт только газеты",
+         ids(pipeline.pick_next(5, docs, (), "газеты", everything))
+         == ["pn1", "pn2"]),
+        ("готовое пропускается, берётся следующее",
+         ids(pipeline.pick_next(
+             2, docs, (), None, lambda i, s: i not in ("bv1", "bv3")))
+         == ["bv2", "bv4"]),
+        ("очереди не хватает — берётся сколько есть",
+         len(pipeline.pick_next(50, docs, (), None, everything)) == 7),
+        ("без quality.json документ не обработан", not no_quality),
+        ("целиком распознанный и измеренный — обработан", processed),
+        ("половина страниц — не обработан", not half_done),
+        ("неизвестный документ — не обработан", not none_yet),
+        ("обработанный и найденный не берётся", not skip_known),
+        ("новая фамилия возвращает документ в работу", need_other),
+        ("без фамилий обработанный не берётся", not skip_plain),
+        ("скачивание следующего началось до конца этого",
+         overlapped == [True]),
+        ("оба документа обработаны", results == {"bv1": None, "bv2": None}),
+        ("упавшее скачивание не останавливает соседа",
+         mixed["bad"] is not None and mixed["bv3"] is None
+         and "process bv3" in order),
+        ("у упавшего нет шагов обработки", "process bad" not in order),
+    ]
+    bad = 0
+    for label, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad

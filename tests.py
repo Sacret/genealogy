@@ -15,6 +15,10 @@ from eval import evaluate as evaluate_ocr, load_corpus as load_ocr_corpus
 from audit import (validate_box, validate_meta, validate_quality,
                    validate_verdict)
 from surnamefind.search import find_in_text, stem_query
+import docstore
+import verdict
+from audit import validate_evidence
+from find import weak_pages_unmentioned
 
 # (текст, должно ли найтись)
 CASES_KUZNETSOV = [
@@ -74,12 +78,13 @@ def main():
            + pagelist_suite() + bigscan_suite() + thumbs_suite()
            + namesakes_suite()
            + pamyatnye_suite() + gitignore_suite() + boxes_suite()
-           + events_suite() + registry_suite() + corpus_suite() + audit_suite())
+           + events_suite() + registry_suite() + corpus_suite() + audit_suite()
+           + verdict_suite())
     bad += ocr_eval_suite()
     total = (len(CASES_KUZNETSOV) + len(CASES_ADJ) + len(CASES_HYPHEN)
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
-             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5)
+             + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 28)
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -1114,6 +1119,122 @@ def boxes_suite():
             ("и координаты при ней",
              f"data-box='{','.join(str(v) for v in kept.get('box', []))}'"
              in cell)]:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
+    return bad
+
+
+def verdict_suite():
+    import json
+    import pathlib
+    import tempfile
+    from types import SimpleNamespace
+    print("\nчерновик вердикта:")
+    ok_doc, bad_doc = "bv0000901", "bv0000902"
+    dismissed = {"кармазин": {"кармалин": "другая фамилия"}}
+    quality = {"threshold": 60.0, "pages": {"1": 52.6, "2": 71.0, "3": 50.9},
+               "weak": [1, 3]}
+    old_root = docstore.ROOT
+    tmp = tempfile.TemporaryDirectory()
+    docstore.ROOT = pathlib.Path(tmp.name)
+    try:
+        def make(ident, texts):
+            d = docstore.ROOT / ident
+            (d / "ocr").mkdir(parents=True)
+            for n, text in enumerate(texts, 1):
+                (d / "ocr" / f"p{n:04d}.txt").write_text(text, encoding="utf-8")
+            docstore.save_meta(ident, url=f"https://x/{ident}",
+                               title="Газета", pages=len(texts), dpi=400)
+            (d / "quality.json").write_text(json.dumps(quality), encoding="utf-8")
+
+        make(ok_doc, ["казакъ Кармалинъ Иванъ", "объявленіе о продажѣ",
+                      "стихотвореніе"])
+        make(bad_doc, ["урядникъ Кармазинъ Яковъ", "объявленіе", "стихи"])
+        ctx = verdict.gather(ok_doc, "Кармазинъ", dismissed=dismissed)
+        bad_ctx = verdict.gather(bad_doc, "Кармазинъ", dismissed=dismissed)
+        text = verdict.build_text(ctx)
+        hit = lambda cost, partial=False, raw="Кармалинъ": SimpleNamespace(
+            cost=cost, partial=partial, raw=raw)
+
+        checks = [
+            ("искажённое слово из списка отсеяно",
+             verdict.classify(hit(2.0), {"кармалин": "x"}) == ("dismissed", "x")),
+            ("точное совпадение не отсеивается даже из списка",
+             verdict.classify(hit(0), {"кармалин": "x"})[0] == "exact"),
+            ("обрывок переноса не отсеивается",
+             verdict.classify(hit(0.5, True), {"кармалин": "x"})[0] == "partial"),
+            ("слово не из списка уходит человеку",
+             verdict.classify(hit(2.0), {})[0] == "review"),
+            ("в чистом документе всё отсеяно", not verdict.unresolved(ctx)),
+            ("чистый документ можно записать", verdict.problems(ctx) == []),
+            ("в тексте слабые страницы с оценками",
+             "стр. 1 — 52,6, стр. 3 — 50,9" in text),
+            ("порог и число слабых страниц в тексте",
+             "ниже порога 60: 2 страницы" in text),
+            ("отсеянное названо вместе с причиной",
+             "«Кармалинъ» (другая фамилия; стр. 1)" in text),
+            ("места названы непросмотренными",
+             "Места найдены не были" in text),
+            ("точная Кармазинъ блокирует автозапись",
+             any("решает человек" in p for p in verdict.problems(bad_ctx, "x"))),
+            ("без разбора неотсеянное блокирует",
+             any("--note" in p for p in verdict.problems(
+                 {**ctx, "place_hits": {"Ровеньки": [2]}}))),
+            ("с --note место можно записать",
+             verdict.problems({**ctx, "place_hits": {"Ровеньки": [2]}},
+                              "стр. 2 — другая Ровеньки") == []),
+            ("обрывок с чужим продолжением отсеивается",
+             verdict.continuation_fits(
+                 SimpleNamespace(raw="Мо-", context="село Мо- рушка, поле"),
+                 "могучев", [], 3.0) is False),
+            ("обрыв с настоящим продолжением остаётся",
+             verdict.continuation_fits(
+                 SimpleNamespace(raw="Мо-", context="казакъ Мо- гучевъ Иванъ"),
+                 "могучев", [], 3.0) is True),
+            ("нечитаемое продолжение — судить не по чему",
+             verdict.continuation_fits(
+                 SimpleNamespace(raw="Могу-", context="казакъ Могу- 4:65 и"),
+                 "могучев", [], 3.0) is None),
+            ("склонение: 1 страница, 2 страницы, 5 страниц",
+             [verdict.plural(n, "а", "б", "в") for n in (1, 2, 5, 11, 22)]
+             == ["а", "б", "в", "в", "б"]),
+        ]
+
+        written = verdict.record(ctx)
+        rows = docstore.read_log(ok_doc)
+        row = [r for r in rows if r["type"] == "verdict"][-1]
+        errors, warnings = validate_verdict(row, 3, {})
+        ev_errors, ev_warnings = validate_evidence(row["evidence"], 3, quality)
+        drift = {**quality, "weak": [1]}
+        checks += [
+            ("вердикт записан со status absent",
+             row["status"] == "absent" and row["verdict"] == written),
+            ("вердикт проходит аудит", (errors, warnings) == ([], [])),
+            ("evidence проходит аудит", (ev_errors, ev_warnings) == ([], [])),
+            ("перед вердиктом записан поиск",
+             [r["type"] for r in rows] == ["search", "verdict"]),
+            ("расхождение с quality.json — предупреждение",
+             bool(validate_evidence(row["evidence"], 3, drift)[1])),
+            ("у не последнего вердикта расхождение не предупреждает",
+             validate_evidence(row["evidence"], 3, drift, current=False)[1] == []),
+            ("слой вне списка — ошибка",
+             bool(validate_evidence({**row["evidence"],
+                                     "layers": {"ocr_x": 1}}, 3)[0])),
+            ("слабая страница вне тома — ошибка",
+             bool(validate_evidence({**row["evidence"],
+                                     "weak_pages": {"9": 40.0}}, 3)[0])),
+            ("молчание о слабых страницах ловится",
+             weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА. Всё чисто.") == [1, 3]),
+            ("названная страница снимает замечание",
+             weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА. Стр. 3 — шум.") == []),
+            ("упоминание порога снимает замечание",
+             weak_pages_unmentioned(ok_doc, "НЕ НАЙДЕНА, слабые страницы разобраны") == []),
+        ]
+    finally:
+        docstore.ROOT = old_root
+        tmp.cleanup()
+    bad = 0
+    for label, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {label}")
     return bad

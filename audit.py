@@ -229,6 +229,54 @@ def validate_verdict(row, total, people, current=True):
     return errors, warnings
 
 
+EVIDENCE_LAYERS = ("ocr", "ocr_bands", "ocr_cols", "ocr_prep", "ocr_stripes")
+
+
+def validate_evidence(evidence, total, quality=None, current=True):
+    """Поле `evidence` вердикта, записанного verdict.py, и его сверка с данными.
+
+    Проза такого вердикта построена по этим числам, поэтому расхождение
+    с quality.json означает, что текст описывает не то распознавание,
+    какое лежит в документе сейчас (замер переделали, а вердикт остался).
+    Для прежних вердиктов, не последних по фамилии, это только история.
+    """
+    errors, warnings = [], []
+    if not isinstance(evidence, dict):
+        return ["evidence должен быть объектом"], warnings
+    weak = evidence.get("weak_pages")
+    if not isinstance(weak, dict):
+        errors.append("evidence.weak_pages должен быть объектом")
+        weak = {}
+    pages, bad = page_set(list(weak), total, "evidence.weak_pages")
+    errors.extend(bad)
+    layers = evidence.get("layers")
+    if not isinstance(layers, dict):
+        errors.append("evidence.layers должен быть объектом")
+        layers = {}
+    for name, count in layers.items():
+        if name not in EVIDENCE_LAYERS:
+            errors.append(f"evidence.layers: неизвестный слой {name!r}")
+        elif (not isinstance(count, int) or isinstance(count, bool)
+              or not 0 < count <= total):
+            errors.append(f"evidence.layers[{name!r}] должен быть целым "
+                          f"от 1 до {total}")
+    dismissed = evidence.get("dismissed", [])
+    if not isinstance(dismissed, list):
+        errors.append("evidence.dismissed должен быть списком")
+        dismissed = []
+    for item in dismissed:
+        page = item.get("page") if isinstance(item, dict) else None
+        if not isinstance(page, int) or not 1 <= page <= total:
+            errors.append(f"evidence.dismissed: страница {page!r} вне 1..{total}")
+    if quality is not None and current and not errors:
+        measured = {str(p) for p in quality.get("weak", [])}
+        if measured != set(weak):
+            warnings.append(
+                "evidence.weak_pages расходится с quality.json "
+                f"(в вердикте {len(weak)}, в замере {len(measured)} стр.)")
+    return errors, warnings
+
+
 def validate_search(row, total):
     errors = []
     fields = ("date", "surname", "stem", "threshold", "document", "url",
@@ -388,6 +436,7 @@ def audit_project(root=ROOT):
             report.error(folder / "ocr", "; ".join(detail))
 
         quality_path = folder / "quality.json"
+        quality = None
         if quality_path.exists():
             quality = read_json(quality_path, report)
             if quality is not None:
@@ -418,6 +467,13 @@ def audit_project(root=ROOT):
                     report.error(where, message)
                 for message in warnings:
                     report.warn(where, message)
+                if "evidence" in row:
+                    errors, warnings = validate_evidence(
+                        row["evidence"], total, quality, current)
+                    for message in errors:
+                        report.error(where, message)
+                    for message in warnings:
+                        report.warn(where, message)
             else:
                 report.error(where, f"неизвестный type {kind!r}")
             if row.get("date") and not validate_date(row["date"]):

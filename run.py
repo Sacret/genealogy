@@ -134,6 +134,12 @@ def process_doc(a, base):
         if psm == "4":
             step("перечитывание колонками", ["rescue.py", ident, "--cols"])
 
+    if a.stripes:
+        # Сплошной проход вертикальными лентами. Дорогой и не нужный каждому
+        # выпуску, поэтому по требованию; слой в репозиторий не идёт, но
+        # stripes.json в конце отмечает, что документ прочитан целиком.
+        step("сплошной проход лентами", ["stripes.py", ident])
+
     for surname in a.find:
         step(f"поиск: {surname}", ["find.py", ident, surname])
 
@@ -191,6 +197,9 @@ def main():
                                   "по умолчанию 6, у газет 4")
     ap.add_argument("--skip-rescue", action="store_true",
                     help="без перечитывания ненадёжных страниц полосами")
+    ap.add_argument("--stripes", action="store_true",
+                    help="ещё и сплошной проход вертикальными лентами "
+                         "(stripes.py): дорого, для газет с плотными списками имён")
     a = ap.parse_args()
 
     if bool(a.base) == bool(a.next_n):

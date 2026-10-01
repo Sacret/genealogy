@@ -513,6 +513,17 @@ a.year:hover { border-color: var(--accent); }
    подсветки глаз её не находит. */
 .nil-doc:target { background: var(--wait-bg); }
 .nil-doc.hidden, .nils.hidden { display: none; }
+/* Свёрнутый список показывает первые пять дел. Под фильтром сворачивать
+   нечего: оставшиеся строки — это ответ, и прятать его под кнопку нельзя,
+   поэтому на время фильтра список раскрыт целиком, а кнопки нет. */
+body:not(.filtering) .nils.folded .nil-doc.more { display: none; }
+.nil-more { display: block; font: inherit; font-size: 13px; line-height: 1.45;
+            color: var(--dim); background: none; border: 0; cursor: pointer;
+            padding: 3px 0; margin-top: 2px; }
+.nil-more:hover { color: var(--accent); }
+.nil-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px;
+                          border-radius: 4px; }
+body.filtering .nil-more { display: none; }
 footer { color: var(--dim); font-size: 13px; margin-top: 48px;
          border-top: 1px solid var(--line); padding-top: 22px; }
 footer h2 { color: var(--ink); font-size: 17px; font-weight: 600;
@@ -743,12 +754,12 @@ footer .build { margin-top: 18px; font-size: 12px; }
 При расширенном пороге кандидатов 4; все разобраны по контексту, спорное — по скану.</p><p><strong>ОГОВОРКА О ПОЛНОТЕ</strong>: все четыре полосы прочитаны основным распознаванием, горизонтальными лентами и разрезом по колонкам; ниже порога 60 полос нет. Слова на <em>«Кар»</em> и <em>«Мог»</em> по всем слоям выписаны и разобраны. Сплошной проход вертикальными лентами не делался. Именные росписи описаны выборочно, не поимённо.</p></div><div class=cropgroup><div class='cap crophead'>стр. 2 · <span class='badge hit'>родство подтверждено</span><a class=person href='https://family.sacret.ru/persons/i0023/' target=_blank title='1834-1926 · писарь Комиссии размежевания земель войска Донского, затем землемерный помощник и архивариус, губернский секретарь'>Иосиф Данилович Могучев</a></div><div class=crop><button class=shot type=button title='Открыть страницу целиком, с выделенным словом' data-full='pn0026005/crops/p0002_могучев_1.png' data-page='pn0026005/scans/p0002.jpg' data-box='0,4564,9998,4995' data-size='9998,15035'><img alt='Могучевъ, стр. 2' src='pn0026005/crops/thumbs/p0002_могучев_1.png' width=620 height=27 loading=lazy decoding=async></button><div class=cap>вырезка из скана, <a href='pn0026005/scans/p0002.jpg'>страница целиком</a>, <a href='pn0026005/crops/p0002_могучев_1.png'>полный размер</a></div></div></div></td>
 </tr>
 </tbody></table></details></section>
-<div class=nils data-key='g1882' data-src='journal/nils-g1882.js?v=ba1a3d9c8d'><p class=nil-head>Ничего не найдено <span class=nil-n>· 26</span></p><ul style='min-height:702px'></ul></div>
+<div class=nils data-key='g1882' data-src='journal/nils-g1882.js?v=ba1a3d9c8d'><p class=nil-head>Ничего не найдено <span class=nil-n>· 26</span></p><ul style='min-height:162px'></ul></div>
 </div>
 <div class=year-mark id='g1883'></div>
 <div class=year-block>
 <div class=year-tag aria-hidden=true><span>1883</span></div>
-<div class=nils data-key='g1883' data-src='journal/nils-g1883.js?v=fdb16252fa'><p class=nil-head>Ничего не найдено <span class=nil-n>· 101</span></p><ul style='min-height:2727px'></ul></div>
+<div class=nils data-key='g1883' data-src='journal/nils-g1883.js?v=fdb16252fa'><p class=nil-head>Ничего не найдено <span class=nil-n>· 101</span></p><ul style='min-height:162px'></ul></div>
 </div>
 <div class=year-mark id='g1884'></div>
 <div class=year-block>
@@ -778,7 +789,7 @@ footer .build { margin-top: 18px; font-size: 12px; }
 <div class=year-mark id='g1885'></div>
 <div class=year-block>
 <div class=year-tag aria-hidden=true><span>1885</span></div>
-<div class=nils data-key='g1885' data-src='journal/nils-g1885.js?v=1eb0452222'><p class=nil-head>Ничего не найдено <span class=nil-n>· 36</span></p><ul style='min-height:972px'></ul></div>
+<div class=nils data-key='g1885' data-src='journal/nils-g1885.js?v=1eb0452222'><p class=nil-head>Ничего не найдено <span class=nil-n>· 36</span></p><ul style='min-height:162px'></ul></div>
 </div>
 <div class=year-mark id='g1887'></div>
 <div class=year-block>
@@ -1690,7 +1701,7 @@ footer .build { margin-top: 18px; font-size: 12px; }
 При расширенном пороге кандидатов 17; все разобраны по контексту, спорные и места — по скану.</p><p><strong>ОГОВОРКА О ПОЛНОТЕ</strong>: по полосам 57,8, 65,3, 62,7, 59,5; ниже порога 60 стр. 1, 4; остальные штатному перечитыванию не подлежали. Все четыре полосы перечитаны горизонтальными лентами (23 504 слов против 10 778 в основном слое), разрезом по колонкам (10 682) и сплошными вертикальными лентами (25 138); слова на <em>«Кар»</em> и <em>«Мог»</em> по всем слоям выписаны и разобраны. Переносы <em>«Кар-»</em> и <em>«Мог-»</em> проверены по всем слоям: фамилий среди них нет. Именные росписи описаны по заголовкам и выборочно, не поимённо.</p></div></td>
 </tr>
 </tbody></table></details></section>
-<div class=nils data-key='g1909' data-src='journal/nils-g1909.js?v=82e13721c4'><p class=nil-head>Ничего не найдено <span class=nil-n>· 173</span></p><ul style='min-height:4671px'></ul></div>
+<div class=nils data-key='g1909' data-src='journal/nils-g1909.js?v=82e13721c4'><p class=nil-head>Ничего не найдено <span class=nil-n>· 173</span></p><ul style='min-height:162px'></ul></div>
 </div>
 <div class=year-mark id='g1910'></div>
 <div class=year-block>
@@ -1850,7 +1861,7 @@ footer .build { margin-top: 18px; font-size: 12px; }
 При расширенном пороге кандидатов 16; все разобраны по контексту, спорные и места — по скану.</p><p><strong>ОГОВОРКА О ПОЛНОТЕ</strong>: по полосам 59,0, 67,6, 66,6, 58,0; ниже порога 60 стр. 1, 4; остальные штатному перечитыванию не подлежали. Все четыре полосы перечитаны горизонтальными лентами (22 207 слов против 10 339 в основном слое), разрезом по колонкам (9 275) и сплошными вертикальными лентами (23 842); слова на <em>«Кар»</em> и <em>«Мог»</em> по всем слоям выписаны и разобраны. Переносы <em>«Кар-»</em> и <em>«Мог-»</em> проверены по всем слоям: фамилий среди них нет. Слово <em>Могучева</em> на стр. 3 читается в трёх слоях из четырёх (основном, лентах и сплошных лентах); разрез по колонкам его не дал. Именные росписи описаны по заголовкам и выборочно, не поимённо.</p></div><div class=cropgroup><div class='cap crophead'>стр. 3 · <span class='badge hit'>родство подтверждено</span><a class=person href='https://family.sacret.ru/persons/i0026/' target=_blank title='1875-? · медицинский фельдшер в Новочеркасске, позже содержатель аптекарского магазина'>Алексей Иосифович Могучев</a></div><div class=crop><button class=shot type=button title='Открыть страницу целиком, с выделенным словом' data-full='pn0024812/crops/p0003_могучев_1.png' data-page='pn0024812/scans/p0003.jpg' data-box='0,3723,3047,4015' data-size='3047,4519'><img alt='Могучевъ, стр. 3' src='pn0024812/crops/thumbs/p0003_могучев_1.png' width=620 height=59 loading=lazy decoding=async></button><div class=cap>вырезка из скана, <a href='pn0024812/scans/p0003.jpg'>страница целиком</a>, <a href='pn0024812/crops/p0003_могучев_1.png'>полный размер</a></div></div></div></td>
 </tr>
 </tbody></table></details></section>
-<div class=nils data-key='g1910' data-src='journal/nils-g1910.js?v=d5b48f23a0'><p class=nil-head>Ничего не найдено <span class=nil-n>· 279</span></p><ul style='min-height:7533px'></ul></div>
+<div class=nils data-key='g1910' data-src='journal/nils-g1910.js?v=d5b48f23a0'><p class=nil-head>Ничего не найдено <span class=nil-n>· 279</span></p><ul style='min-height:162px'></ul></div>
 </div>
 <div class=year-mark id='g1911'></div>
 <div class=year-block>
@@ -1948,7 +1959,7 @@ footer .build { margin-top: 18px; font-size: 12px; }
 Средняя уверенность 61,9, ниже порога полосы 1 (58,8) и 4 (57,4). Четвёртая — та самая, где стоит находка: строка склеена с двумя соседними колонками (<em>«Корею свои войска въ любое мѣсто»</em>, <em>«проповѣдниковъ 240»</em>), и в тексте фамилия читается только вместе с этим сором. На оттиске же она набрана чисто.</p></div><div class=cropgroup><div class='cap crophead'>стр. 4 · <span class='badge hit'>родство подтверждено</span><a class=person href='https://family.sacret.ru/persons/i0026/' target=_blank title='1875-? · медицинский фельдшер в Новочеркасске, позже содержатель аптекарского магазина'>Алексей Иосифович Могучев</a></div><div class=crop><button class=shot type=button title='Открыть страницу целиком, с выделенным словом' data-full='pn0024347/crops/p0004_могучев_1.png' data-page='pn0024347/scans/p0004.jpg' data-box='0,1972,3030,2148' data-size='3030,4610'><img alt='Могучевъ, стр. 4' src='pn0024347/crops/thumbs/p0004_могучев_1.png' width=620 height=36 loading=lazy decoding=async></button><div class=cap>вырезка из скана, <a href='pn0024347/scans/p0004.jpg'>страница целиком</a>, <a href='pn0024347/crops/p0004_могучев_1.png'>полный размер</a></div></div></div></td>
 </tr>
 </tbody></table></details></section>
-<div class=nils data-key='g1911' data-src='journal/nils-g1911.js?v=2e8fe53177'><p class=nil-head>Ничего не найдено <span class=nil-n>· 376</span></p><ul style='min-height:10152px'></ul></div>
+<div class=nils data-key='g1911' data-src='journal/nils-g1911.js?v=2e8fe53177'><p class=nil-head>Ничего не найдено <span class=nil-n>· 376</span></p><ul style='min-height:162px'></ul></div>
 </div>
 <div class=year-mark id='g1912'></div>
 <div class=year-block>
@@ -2426,7 +2437,7 @@ footer .build { margin-top: 18px; font-size: 12px; }
 <strong>ПРОВЕРКА</strong>. При обычном пороге два попадания, и за ними одно слово: <em>Могучевт</em> и <em>Могучевь</em> — одна и та же запись стр. 3, прочитанная двумя слоями. Сплошное перечтение лентами дало ее же третий раз, <em>Могучезь</em> со счетом 0,886. Второго Могучева в номере нет. При расширенном пороге двадцать два, и лишние разбираются: дважды <em>Текучевь</em> и <em>Марченвогь</em> на стр. 3, четырежды <em>Харчевковъ</em> на стр. 2 — это Харченковы и Харченко из донецкого наряда, — трижды <em>Фомичева</em> и дважды <em>«ПЕРЕЧЕНЬ»</em> на стр. 1, <em>Тодчевь</em> на стр. 2 (крестьянин Михаил Моисеев Толчев), <em>Норучерхасской</em> на стр. 4.</p><p><strong>ОГОВОРКА О ПОЛНОТЕ</strong>: средняя 45,5, все четыре полосы ниже порога 60 и перечитаны лентами и колонками. Стр. 3, где находка, снята на 43,4 — ниже черты 45, за которой поколоночного чтения мало, — и стр. 4 на 34,2. Поэтому все четыре полосы перечитаны еще и сплошными вертикальными лентами во всю высоту листа (3939, 5156, 4863 и 3674 слова против 1176-1857 у колонок), и все слова стр. 1-3 на <em>«М»</em> выписаны и прочитаны глазами: 64, 108 и 179. Кроме нашей записи ближайшие — Моисеевы, Моргушин, Московой, Мулдавов, Мурсевов, Мишин, Мызарь. Переносов на <em>«Мог-»</em> в списках нет.</p></div><div class=cropgroup><div class='cap crophead'>стр. 3 · <span class='badge maybe'>родство не установлено</span></div><div class=crop><button class=shot type=button title='Открыть страницу целиком, с выделенным словом' data-full='pn0024275/crops/p0003_могучев_1.png' data-page='pn0024275/scans/p0003.jpg' data-box='655,1381,837,1468' data-size='3112,4554'><img alt='Могучевъ, стр. 3' src='pn0024275/crops/thumbs/p0003_могучев_1.png' width=182 height=87 loading=lazy decoding=async></button><div class=cap>вырезка из скана, <a href='pn0024275/scans/p0003.jpg'>страница целиком</a>, <a href='pn0024275/crops/p0003_могучев_1.png'>полный размер</a></div></div></div></td>
 </tr>
 </tbody></table></details></section>
-<div class=nils data-key='g1912' data-src='journal/nils-g1912.js?v=1126ccf8aa'><p class=nil-head>Ничего не найдено <span class=nil-n>· 164</span></p><ul style='min-height:4428px'></ul></div>
+<div class=nils data-key='g1912' data-src='journal/nils-g1912.js?v=1126ccf8aa'><p class=nil-head>Ничего не найдено <span class=nil-n>· 164</span></p><ul style='min-height:162px'></ul></div>
 </div>
 <div class=year-mark id='g1913'></div>
 <div class=year-block>
@@ -2572,7 +2583,7 @@ footer .build { margin-top: 18px; font-size: 12px; }
 Скан хороший: средняя уверенность 88,4, ниже порога девять страниц из 305, и восемь из них — фотовклейка.</p></div><div class=cropgroup><div class='cap crophead'>стр. 224 · <span class='badge maybe'>родство не установлено</span></div><div class=crop><button class=shot type=button title='Открыть страницу целиком, с выделенным словом' data-full='bv0000323/crops/p0224_могучев_1.png' data-page='bv0000323/scans/p0224.jpg' data-box='0,1426,1955,1673' data-size='1955,3142'><img alt='Могучевъ, стр. 224' src='bv0000323/crops/thumbs/p0224_могучев_1.png' width=620 height=78 loading=lazy decoding=async></button><div class=cap>вырезка из скана, <a href='bv0000323/scans/p0224.jpg'>страница целиком</a>, <a href='bv0000323/crops/p0224_могучев_1.png'>полный размер</a></div></div></div><div class=cropgroup><div class='cap crophead'>стр. 225 · <span class='badge maybe'>родство не установлено</span> · вырезок несколько: на странице стоят однофамильцы, кто из них кто — сказано в вердикте</div><div class=crop><button class=shot type=button title='Открыть страницу целиком, с выделенным словом' data-full='bv0000323/crops/p0225_могучев_1.png' data-page='bv0000323/scans/p0225.jpg' data-box='0,826,1990,1072' data-size='1990,3141'><img alt='Могучевъ, стр. 225' src='bv0000323/crops/thumbs/p0225_могучев_1.png' width=620 height=77 loading=lazy decoding=async></button><div class=cap>вырезка из скана, <a href='bv0000323/scans/p0225.jpg'>страница целиком</a>, <a href='bv0000323/crops/p0225_могучев_1.png'>полный размер</a></div></div><div class=crop><button class=shot type=button title='Открыть страницу целиком, с выделенным словом' data-full='bv0000323/crops/p0225_могучев_2.png' data-page='bv0000323/scans/p0225.jpg' data-box='0,1002,1990,1248' data-size='1990,3141'><img alt='Могучевъ, стр. 225' src='bv0000323/crops/thumbs/p0225_могучев_2.png' width=620 height=77 loading=lazy decoding=async></button><div class=cap>вырезка из скана, <a href='bv0000323/scans/p0225.jpg'>страница целиком</a>, <a href='bv0000323/crops/p0225_могучев_2.png'>полный размер</a></div></div></div></td>
 </tr>
 </tbody></table></details></section>
-<div class=nils data-key='no-year' data-src='journal/nils-no-year.js?v=742d208cda'><p class=nil-head>Ничего не найдено <span class=nil-n>· 8</span></p><ul style='min-height:216px'></ul></div>
+<div class=nils data-key='no-year' data-src='journal/nils-no-year.js?v=742d208cda'><p class=nil-head>Ничего не найдено <span class=nil-n>· 8</span></p><ul style='min-height:162px'></ul></div>
 </div>
 <footer><section aria-labelledby=about-title><h2 id=about-title>О журнале</h2><p>Это рабочий журнал поиска людей в дореволюционных книгах, газетах и официальных изданиях. Каждая строка — проверка одной фамилии в одном документе: сначала OCR находит возможные совпадения, затем они сверяются со сканом глазами.</p><p>Поэтому «не найдена» означает, что фамилия не обнаружена в доступном скане с указанными полнотой и качеством, а не доказывает, что человека не существовало или его никогда не упоминали.</p><ul class=legend><li><span class='badge ok'>родство подтверждено</span> источник и известные сведения позволяют уверенно установить человека;</li><li><span class='badge maybe'>родство не установлено</span> фамилия найдена, но данных для отождествления недостаточно;</li><li><span class='badge no'>не найдена</span> проверка завершена без подтверждённого совпадения;</li><li><span class='badge wait'>неясно / не проверена</span> состояние скана не позволяет сделать вывод или работа ещё не закончена.</li></ul><p>Совпадения фамилии и места сами по себе не подтверждают родство: для этого нужны согласующиеся имена, даты, занятие, адрес или другие связи с уже известной <a href='https://family.sacret.ru/'>родословной</a>.</p></section><p class=author>Автор проекта — <a href='https://sacret.ru/'>Анастасия Абакумова</a>.</p><p class=build>Пересобирается автоматически при каждом поиске. Источник — <code>&lt;документ&gt;/searches.jsonl</code>.</p></footer>
 </div>
@@ -2608,6 +2619,7 @@ function keys(el) {
 // ссылкой на такое дело. Файл — вызов journalNils(год, записи); подключается
 // он тегом <script>, потому что журнал открывают и прямо с диска, а
 // `fetch` с диска браузер не пускает.
+const NIL_SHOWN = 5;
 const nilBoxes = Array.from(document.querySelectorAll('.nils[data-src]'));
 window.journalNils = (key, rows) => {
   const box = nilBoxes.find(b => b.dataset.key === key);
@@ -2638,10 +2650,26 @@ window.journalNils = (key, rows) => {
       t.dataset.s = st;
       li.append(t);
     });
+    if (frag.childNodes.length >= NIL_SHOWN) li.classList.add('more');
     frag.append(li);
   });
   ul.append(frag);
   ul.style.minHeight = '';
+  const extra = rows.length - NIL_SHOWN;
+  if (extra > 0) {
+    box.classList.add('folded');
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'nil-more';
+    const label = () => {
+      const folded = box.classList.contains('folded');
+      more.textContent = folded ? `Ещё ${extra} ▾` : 'Свернуть ▴';
+      more.setAttribute('aria-expanded', String(!folded));
+    };
+    more.onclick = () => { box.classList.toggle('folded'); label(); };
+    label();
+    ul.after(more);
+  }
   box.dataset.ready = '1';
 };
 function loadNils(box) {
@@ -2781,6 +2809,7 @@ function apply() {
   // документов или один. Пустой ответ называется словами: без надписи
   // фильтр, срезавший всё, выглядел бы поломкой страницы.
   count.classList.toggle('on', !!active);
+  document.body.classList.toggle('filtering', !!active);
   if (active) {
     count.innerHTML = shown
       ? `Показано <b>${shown}</b> ${plural(shown, 'поиск', 'поиска', 'поисков')}`
@@ -2859,6 +2888,9 @@ function openTarget() {
     return;
   }
   const sec = id && document.getElementById(id);
+  // Дело из свёрнутой части списка: без раскрытия якорю не во что встать.
+  const box = sec && sec.classList.contains('more') && sec.closest('.nils.folded');
+  if (box) box.querySelector('.nil-more').click();
   const det = sec && sec.querySelector('details.searches');
   if (det) det.open = true;
 }

@@ -754,6 +754,9 @@ def compact_suite():
         ("число дел в заголовке и место под строки",
          "Ничего не найдено <span class=nil-n>· 2</span>" in html
          and "min-height:54px" in html),
+        ("длинный список держит место под пять строк и кнопку",
+         "min-height:162px" in build_journal(
+             {str(i): _doc(1913, "absent") for i in range(9)})[0]),
         ("файл в адресе с хэшем содержимого",
          re.search(r"data-src='journal/nils-g1911\.js\?v=[0-9a-f]{10}'", html)
          is not None),

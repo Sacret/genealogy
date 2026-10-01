@@ -550,6 +550,17 @@ a.year:hover { border-color: var(--accent); }
    подсветки глаз её не находит. */
 .nil-doc:target { background: var(--wait-bg); }
 .nil-doc.hidden, .nils.hidden { display: none; }
+/* Свёрнутый список показывает первые пять дел. Под фильтром сворачивать
+   нечего: оставшиеся строки — это ответ, и прятать его под кнопку нельзя,
+   поэтому на время фильтра список раскрыт целиком, а кнопки нет. */
+body:not(.filtering) .nils.folded .nil-doc.more { display: none; }
+.nil-more { display: block; font: inherit; font-size: 13px; line-height: 1.45;
+            color: var(--dim); background: none; border: 0; cursor: pointer;
+            padding: 3px 0; margin-top: 2px; }
+.nil-more:hover { color: var(--accent); }
+.nil-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px;
+                          border-radius: 4px; }
+body.filtering .nil-more { display: none; }
 footer { color: var(--dim); font-size: 13px; margin-top: 48px;
          border-top: 1px solid var(--line); padding-top: 22px; }
 footer h2 { color: var(--ink); font-size: 17px; font-weight: 600;
@@ -615,6 +626,7 @@ function keys(el) {
 // ссылкой на такое дело. Файл — вызов journalNils(год, записи); подключается
 // он тегом <script>, потому что журнал открывают и прямо с диска, а
 // `fetch` с диска браузер не пускает.
+const NIL_SHOWN = __NIL_SHOWN__;
 const nilBoxes = Array.from(document.querySelectorAll('.nils[data-src]'));
 window.journalNils = (key, rows) => {
   const box = nilBoxes.find(b => b.dataset.key === key);
@@ -645,10 +657,26 @@ window.journalNils = (key, rows) => {
       t.dataset.s = st;
       li.append(t);
     });
+    if (frag.childNodes.length >= NIL_SHOWN) li.classList.add('more');
     frag.append(li);
   });
   ul.append(frag);
   ul.style.minHeight = '';
+  const extra = rows.length - NIL_SHOWN;
+  if (extra > 0) {
+    box.classList.add('folded');
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'nil-more';
+    const label = () => {
+      const folded = box.classList.contains('folded');
+      more.textContent = folded ? `Ещё ${extra} ▾` : 'Свернуть ▴';
+      more.setAttribute('aria-expanded', String(!folded));
+    };
+    more.onclick = () => { box.classList.toggle('folded'); label(); };
+    label();
+    ul.after(more);
+  }
   box.dataset.ready = '1';
 };
 function loadNils(box) {
@@ -788,6 +816,7 @@ function apply() {
   // документов или один. Пустой ответ называется словами: без надписи
   // фильтр, срезавший всё, выглядел бы поломкой страницы.
   count.classList.toggle('on', !!active);
+  document.body.classList.toggle('filtering', !!active);
   if (active) {
     count.innerHTML = shown
       ? `Показано <b>${shown}</b> ${plural(shown, 'поиск', 'поиска', 'поисков')}`
@@ -866,6 +895,9 @@ function openTarget() {
     return;
   }
   const sec = id && document.getElementById(id);
+  // Дело из свёрнутой части списка: без раскрытия якорю не во что встать.
+  const box = sec && sec.classList.contains('more') && sec.closest('.nils.folded');
+  if (box) box.querySelector('.nil-more').click();
   const det = sec && sec.querySelector('details.searches');
   if (det) det.open = true;
 }
@@ -1844,6 +1876,10 @@ NILS_DIR = "journal"
 # пустой список держит место под будущие строки, иначе подгрузка года
 # сдвигала бы всё, что ниже, и переход по полосе лет промахивался бы.
 NIL_ROW_PX = 27
+# Сколько дел года видно сразу; остальные — под кнопкой «ещё N». Год 1912-й
+# один занимал под сотню строк, и до следующего года приходилось листать
+# список, который читают редко: важное в журнале — карточки с находками.
+NIL_SHOWN = 5
 
 
 def nils_chunk(key, records) -> tuple:
@@ -2159,7 +2195,8 @@ def build(docs) -> tuple:
         "<div class=lbframe id=lbframe hidden></div>"
         "</div></div></div>"
         "</dialog>")
-    out.append(f"<script>{JS}</script></body></html>")
+    out.append("<script>" + JS.replace("__NIL_SHOWN__", str(NIL_SHOWN))
+               + "</script></body></html>")
     return "\n".join(out), chunks
 
 
@@ -2175,11 +2212,13 @@ def close_nils(year, records, chunks) -> str:
     chunks[name] = js
     ver = hashlib.sha1(js.encode("utf-8")).hexdigest()[:10]
     n = len(records)
+    # Место держится только под видимое: первые NIL_SHOWN строк и кнопку.
+    rows = min(n, NIL_SHOWN) + (n > NIL_SHOWN)
     return (f"<div class=nils data-key='{key}' "
             f"data-src='{NILS_DIR}/{name}?v={ver}'>"
             f"<p class=nil-head>Ничего не найдено <span class=nil-n>· {n}</span>"
             "</p>"
-            f"<ul style='min-height:{n * NIL_ROW_PX}px'></ul></div>")
+            f"<ul style='min-height:{rows * NIL_ROW_PX}px'></ul></div>")
 
 
 def rebuild() -> pathlib.Path:

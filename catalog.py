@@ -665,6 +665,24 @@ def load_catalog() -> dict:
     return out
 
 
+def compact() -> None:
+    """Оставить в кэше по одной строке на номер.
+
+    Опрос дописывает строки по ходу дела, чтобы прерванный прогон ничего
+    не терял, и `--recheck` повторяет уже известный номер новой строкой.
+    Читателю это безразлично — побеждает последняя, — а аудит повторов
+    не пропускает. После опроса файл переписывается: место строки — где
+    номер встретился впервые, содержание — последнее.
+    """
+    if not CATALOG.exists():
+        return
+    rows = load_catalog()
+    tmp = CATALOG.with_suffix(".jsonl.tmp")
+    tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
+                           for r in rows.values()), encoding="utf-8")
+    tmp.replace(CATALOG)
+
+
 def append(records: list) -> None:
     if not records:
         return
@@ -724,6 +742,7 @@ def scan(idents: list, workers: int, timeout: float, retries: int) -> dict:
                       f"{rec['title'] or '— ' + str(rec.get('reason'))}",
                       flush=True)
     append(batch)
+    compact()
     return got
 
 

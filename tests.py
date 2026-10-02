@@ -82,7 +82,7 @@ def main():
     print(f"основа 'Ивановскій' -> {stem_query('Ивановскій')!r}")
 
     bad = (bad_joins + hyphen_suite() + spelling_suite() + catalog_suite()
-           + years_suite() + compact_suite() + social_suite() + chips_suite()
+           + years_suite() + title_year_suite() + compact_suite() + social_suite() + chips_suite()
            + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + thumbs_suite()
            + namesakes_suite()
@@ -922,6 +922,32 @@ def years_suite():
         print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
     return bad
 
+
+
+# Две даты в заголовке — документ встаёт под второй (решение 2 октября
+# 2026 г.); номер выпуска газеты после запятой за год не считается.
+CASES_TITLE_YEAR = [
+    ("Опись войсковым атаманам: (1738-1916 гг.)", 1916),
+    ("Донцы-кавалеры ордена Святого Георгия: 1775-1908 г.", 1908),
+    ("Отчет о женской воскресной школе за 1895-96 учебный год", 1896),
+    ("Отчет Правления: за 1907 и 1908 г.г.", 1908),
+    ("Памятная книжка Области войска Донского: на 1893-1894 год", 1894),
+    ("Походные журналы: 1695, 1696, 1707 и 1708", 1708),
+    ("Казачий вестник: 1885, № 89 (7 ноября)", 1885),
+    ("Приказы по войску Донскому за 1893 год", 1893),
+]
+
+
+def title_year_suite():
+    bad = 0
+    print("\nгод по заголовку:")
+    for title, expected in CASES_TITLE_YEAR:
+        got = docstore.title_year(title)
+        if got != expected:
+            bad += 1
+        mark = "ok " if got == expected else "FAIL"
+        print(f"  [{mark}] {title[:52]!r:56} -> {got}")
+    return bad
 
 def bigscan_suite():
     """Складень в 196 Мпикс должен открываться.

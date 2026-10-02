@@ -106,13 +106,32 @@ def load_meta(ident: str) -> dict:
 # назван в должности. Такой год проставляется в meta.json руками, и он
 # главнее заголовка: заголовок о годе просто молчит.
 YEAR = re.compile(r"\b(1[6-9]\d\d)\b")
+# Две даты в заголовке — «1738-1916 гг.», «за 1909-1910 год», «1895-96»,
+# «за 1907 и 1908 г.г.» — документ помечается второй: так решила
+# пользовательница 2 октября 2026 г. Сводка за период тогда стоит там,
+# где период кончается, а отчёт за учебный год — в году, когда он сдан.
+YEAR_RANGE = re.compile(
+    r"\b(1[6-9]\d\d)(?=\s*(?:[-–—]|\sи\s)\s*(1[6-9]\d\d|\d\d)\b(?!\d)"
+    r"|,\s*(1[6-9]\d\d)\b)")
+
+
+def title_year(title: str) -> int | None:
+    last = None
+    for m in YEAR_RANGE.finditer(title):
+        lo, hi = m.group(1), m.group(2) or m.group(3)
+        y = int(hi if len(hi) == 4 else lo[:2] + hi)
+        if y > int(lo):
+            last = y
+    if last:
+        return last
+    m = YEAR.search(title)
+    return int(m.group(1)) if m else None
 
 
 def meta_year(meta: dict) -> int | None:
     if meta.get("год"):
         return int(meta["год"])
-    m = YEAR.search(meta.get("title") or "")
-    return int(m.group(1)) if m else None
+    return title_year(meta.get("title") or "")
 
 
 def save_meta(ident: str, **fields) -> dict:

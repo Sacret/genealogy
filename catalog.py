@@ -989,9 +989,29 @@ def build(catalog: dict) -> dict:
     return out
 
 
+def with_counts(section: dict) -> dict:
+    """Перед каждым списком томов — сколько в нём томов.
+
+    Файл читают глазами, а длинный список не сосчитать, не пролистав его
+    до конца. Числа ставятся только при записи: в памяти `build` отдаёт
+    разделы без них, и всё, что обходит очередь по разделам, видит одни
+    списки. Годы приказов и памятных книжек — не тома, их не считаем.
+    """
+    res = {}
+    for key, value in section.items():
+        if isinstance(value, dict) and key == "очередь":
+            value = with_counts(value)
+            res[f"{key}_количество"] = sum(
+                v for k, v in value.items() if k.endswith("_количество"))
+        elif isinstance(value, list) and all(isinstance(r, dict) for r in value):
+            res[f"{key}_количество"] = len(value)
+        res[key] = value
+    return res
+
+
 def write(out: dict) -> str:
-    DOCUMENTS.write_text(json.dumps(out, ensure_ascii=False, indent=2) + "\n",
-                         encoding="utf-8")
+    DOCUMENTS.write_text(json.dumps(with_counts(out), ensure_ascii=False,
+                                    indent=2) + "\n", encoding="utf-8")
     return DOCUMENTS.name
 
 

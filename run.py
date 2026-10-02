@@ -85,6 +85,8 @@ def pick_next(n, documents, surnames=(), queue=None, needs=needs_work):
     if not queue:
         candidates += documents.get("в_работе", [])
     for name, items in documents.get("очередь", {}).items():
+        if name.endswith("_количество"):
+            continue
         if not queue or queue in name:
             candidates += items
     out = []

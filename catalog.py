@@ -1002,7 +1002,163 @@ def build(catalog: dict) -> dict:
         "проверены_яндекс_архивом": sorted(checked),
         "нет_нигде": [y for y in span if y not in seen | queued | checked],
     }
+    out["ведомости_по_годам"] = vedomosti_by_year(catalog, out)
     return out
+
+
+MONTH_NAMES = ("январь февраль март апрель май июнь июль август сентябрь "
+               "октябрь ноябрь декабрь").split()
+MONTHS_GEN = {i: m for m, i in MONTHS.items()}
+VEDOMOSTI_ISSUE = re.compile(
+    r"^Донские областные ведомости: (\d{4})[,.]?\s*(?:№\s*)?(\d+)\s*"
+    r"\((\d+)\s+([а-я]+)\)")
+
+
+def vedomosti_by_year(catalog: dict, out: dict) -> dict:
+    """«Донские областные ведомости» по годам: чего в подшивке нет.
+
+    Третья сплошная серия после приказов и памятных книжек, и вопрос к
+    ней тот же — какие куски года закрыты, а каких в библиотеке нет. Но
+    единица здесь не год, а выпуск, поэтому на каждый год две вещи:
+    месяцы, за которые нет ни одного номера, и номера, пропущенные внутри
+    подшивки.
+
+    Пропуск считается по номерам, а не по датам: газета не выходила
+    назавтра после воскресенья и праздника, и дыра в датах при номерах
+    подряд — это день без выпуска, а не потеря библиотеки.
+
+    В 1911-1912 годах газета шла двумя рядами с одинаковым заглавием и
+    своей нумерацией у каждого: ежедневный выпуск и «часть официальная»
+    два раза в неделю. Каталог их не различает, различает темп: у
+    ежедневного номер к концу года подходит к числу дней (отношение
+    номера к дню года около 0,75-0,85), у официальной части оно около
+    0,25. Граница 0,45 разводит их без исключений, в том числе и
+    выпуски с испорченным месяцем в заголовке.
+
+    Испорченный месяц (pn0024020 — «26 января» вместо 26 октября) ловится
+    так: внутри ряда даты должны расти вместе с номерами, и выпуск, не
+    попавший в самую длинную неубывающую цепочку дат, помечается. Такие
+    выпуски не берутся в соседи пропуска, чтобы не врать о его месяце.
+
+    Берутся только годы, в которых что-то уже просмотрено: остальные
+    годы опрошены не целиком (1913 и 1914 вовсе лежат в неопрошенных
+    отрезках pn), и «месяца нет» о них значило бы «не спрашивали».
+    """
+    seen = {r["id"] for r in out["просмотрены"]}
+    working = {r["id"] for r in out["в_работе"]}
+    queued = {r["id"] for r in out["очередь"]["4_газеты"]}
+    dead = {r["id"] for r in out["нет_документа"]}
+    years = {}
+    for ident, cached in catalog.items():
+        m = VEDOMOSTI_ISSUE.match(cached.get("title") or "")
+        if not m or m.group(4) not in MONTHS:
+            continue
+        y, n, day, month = (int(m.group(1)), int(m.group(2)),
+                            int(m.group(3)), MONTHS[m.group(4)])
+        years.setdefault(y, []).append((n, month, day, ident))
+
+    def date_of(y, month, day):
+        try:
+            return datetime(y, month, day)
+        except ValueError:
+            return datetime(y, month, 28)
+
+    def longest_rising(items):
+        """Индексы самой длинной неубывающей по дате цепочки."""
+        best, prev = [1] * len(items), [-1] * len(items)
+        for i in range(len(items)):
+            for j in range(i):
+                if items[j][1:3] <= items[i][1:3] and best[j] + 1 > best[i]:
+                    best[i], prev[i] = best[j] + 1, j
+        i = max(range(len(items)), key=best.__getitem__) if items else -1
+        keep = set()
+        while i >= 0:
+            keep.add(i)
+            i = prev[i]
+        return keep
+
+    result = {}
+    for y in sorted(years):
+        issues = years[y]
+        if not any(i[3] in seen for i in issues):
+            continue
+        series = {}
+        for it in issues:
+            doy = date_of(y, it[1], it[2]).timetuple().tm_yday
+            name = "официальная_часть" if it[0] / doy < 0.45 else "ежедневный"
+            series.setdefault(name, []).append(it)
+        if len(series) == 1:
+            series = {"выпуски": next(iter(series.values()))}
+
+        rows, months_any = {}, set()
+        for name, items in sorted(series.items()):
+            items.sort()
+            keep = longest_rising(items)
+            wrong = [f"{items[k][3]} — № {items[k][0]} ({items[k][2]} "
+                     f"{MONTHS_GEN[items[k][1]]})"
+                     for k in range(len(items)) if k not in keep]
+            good = [items[k] for k in sorted(keep)]
+            nums = [it[0] for it in items]
+            repeats = sorted({n for n in nums if nums.count(n) > 1})
+            # Номер выпуска с испорченной датой всё равно есть в подшивке:
+            # пропуском считается только номер, которого нет вовсе, а
+            # соседи для его месяца берутся из выпусков с верной датой.
+            present = set(nums)
+            gaps = {}
+            for a, b in zip(good, good[1:]):
+                lost = [n for n in range(a[0] + 1, b[0]) if n not in present]
+                if not lost:
+                    continue
+                spans, lo = [], lost[0]
+                for p, q in zip(lost, lost[1:] + [None]):
+                    if q != p + 1:
+                        spans.append(f"№ {lo}" if lo == p else f"№ {lo}-{p}")
+                        lo = q
+                text = (f"{', '.join(spans)} (между № {a[0]} от {a[2]} "
+                        f"{MONTHS_GEN[a[1]]} и № {b[0]} от {b[2]} "
+                        f"{MONTHS_GEN[b[1]]})")
+                # Выпуск бывает в описи, но скан не открывается: номер
+                # библиотеки между соседями отвечает 404. Это не дыра в
+                # подшивке, а битая ссылка — её стоит назвать.
+                if prefix_of(a[3]) == prefix_of(b[3]):
+                    lo_id, hi_id = sorted((number_of(a[3]), number_of(b[3])))
+                    broken = [ident_of(k, prefix_of(a[3]))
+                              for k in range(lo_id + 1, hi_id)
+                              if ident_of(k, prefix_of(a[3])) in dead]
+                    if broken:
+                        text += (f"; в описи есть {', '.join(broken)}, "
+                                 f"но скан не открывается (404)")
+                gaps.setdefault(MONTH_NAMES[a[1] - 1], []).append(text)
+            months = {it[1] for it in good}
+            months_any |= months
+            row = {
+                "первый": f"№ {good[0][0]} от {good[0][2]} "
+                          f"{MONTHS_GEN[good[0][1]]}",
+                "последний": f"№ {good[-1][0]} от {good[-1][2]} "
+                             f"{MONTHS_GEN[good[-1][1]]}",
+                "выпусков": len(items),
+                "месяцы_без_выпусков": [MONTH_NAMES[i - 1]
+                                        for i in range(1, 13)
+                                        if i not in months],
+                "пропущены_номера": gaps,
+            }
+            if repeats:
+                row["номера_дважды"] = repeats
+            if wrong:
+                row["неверная_дата_в_заголовке"] = wrong
+            rows[name] = row
+
+        ids = [it[3] for it in issues]
+        result[str(y)] = {
+            "выпусков_в_каталоге": len(ids),
+            "просмотрены": sum(i in seen for i in ids),
+            "в_работе": sum(i in working for i in ids),
+            "в_очереди": sum(i in queued for i in ids),
+            "месяцы_без_выпусков": [MONTH_NAMES[i - 1] for i in range(1, 13)
+                                    if i not in months_any],
+            "ряды": rows,
+        }
+    return result
 
 
 def with_counts(section: dict) -> dict:

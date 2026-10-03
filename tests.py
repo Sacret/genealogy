@@ -86,7 +86,8 @@ def main():
            + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + thumbs_suite()
            + namesakes_suite()
-           + pamyatnye_suite() + gitignore_suite() + boxes_suite()
+           + pamyatnye_suite() + vedomosti_suite() + gitignore_suite()
+           + boxes_suite()
            + events_suite() + registry_suite() + corpus_suite() + audit_suite()
            + tess_suite() + queue_run_suite() + stripes_suite()
            + verdict_suite())
@@ -95,7 +96,8 @@ def main():
              + len(CASES_SPELLING) + len(CASES_CATALOG) + 6 + len(CASES_YEARS)
              + len(CASES_PERSONS) + len(CASES_DOCLINKS) + 4 + 3 + 3 + 2 + 8 + 6 + 16
              + 9 + 9 + 10 + 10 + 7 + 12 + 7 + 5 + 17 + 16 + 17 + 38
-             + 4)   # журнал: списки в файлах (3), строки без названия (1)
+             + 4    # журнал: списки в файлах (3), строки без названия (1)
+             + 6)   # «Ведомости» по годам
     print(f"\n{len(failures) + bad} провал(ов) из {total}")
     return 1 if (failures or bad) else 0
 
@@ -512,6 +514,52 @@ def catalog_suite():
     bad += not ok
     print(f"  [{'ok ' if ok else 'FAIL'}] газета по времени, а не по id"
           f" -> {order}")
+    return bad
+
+
+def vedomosti_suite():
+    """«Ведомости» по годам: два ряда, испорченный месяц, пропуск и 404.
+
+    Подшивка 1912 года собрана в миниатюре: ежедневный ряд и «часть
+    официальная» под одним заглавием, выпуск с месяцем «января» вместо
+    октября, потерянный номер и номер, который в описи есть, но отвечает
+    404. Год без единого просмотренного выпуска в разрез не попадает.
+    """
+    from catalog import vedomosti_by_year
+    bad = 0
+    print("\n«Ведомости» по годам:")
+    T = "Донские областные ведомости: 1912, № {} ({})"
+    cat = {
+        "pn0000001": {"title": T.format(225, "24 октября")},
+        "pn0000002": {"title": T.format(226, "25 октября")},
+        "pn0000003": {"title": T.format(227, "26 января")},   # опечатка
+        "pn0000004": {"title": T.format(228, "27 октября")},
+        "pn0000005": {"title": T.format(230, "30 октября")},  # 229 нет
+        "pn0000007": {"title": T.format(232, "1 ноября")},    # 231 — 404
+        "pn0000009": {"title": T.format(80, "2 октября")},    # официальная
+        "pn0000010": {"title": T.format(81, "5 октября")},
+        "pn0000011": {"title": "Донские областные ведомости: 1913, № 1 (1 января)"},
+    }
+    out = {"просмотрены": [{"id": "pn0000001"}], "в_работе": [],
+           "очередь": {"4_газеты": [{"id": "pn0000011"}]},
+           "нет_документа": [{"id": "pn0000006"}]}
+    res = vedomosti_by_year(cat, out)
+    daily = res.get("1912", {}).get("ряды", {}).get("ежедневный", {})
+    gaps = [g for v in daily.get("пропущены_номера", {}).values() for g in v]
+    checks = [
+        ("год без просмотренных выпусков не берётся", "1913" not in res),
+        ("два ряда разведены", set(res["1912"]["ряды"])
+         == {"ежедневный", "официальная_часть"}),
+        ("опечатка в месяце поймана",
+         daily.get("неверная_дата_в_заголовке", [""])[0].startswith("pn0000003")),
+        ("номер с опечаткой не считается пропущенным",
+         not any("№ 227" in g for g in gaps)),
+        ("потерянный номер назван", any(g.startswith("№ 229") for g in gaps)),
+        ("404 названо по id", any("pn0000006" in g for g in gaps)),
+    ]
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
     return bad
 
 

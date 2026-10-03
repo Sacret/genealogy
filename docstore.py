@@ -10,6 +10,7 @@
         searches.jsonl  журнал: что искали, когда, с каким результатом
 """
 
+import html as html_lib
 import json
 import pathlib
 import re
@@ -85,9 +86,10 @@ def fetch_title(base_url: str) -> str:
         html = r.read().decode("utf-8", "replace")
     m = re.search(r'<app-root[^>]*\bdata-title="([^"]*)"', html)
     if m:
-        return m.group(1).strip()
+        return html_lib.unescape(m.group(1)).strip()
     m = re.search(r"<title>(.*?)</title>", html, re.S)
-    return re.sub(r"\s+", " ", m.group(1)).strip() if m else "(без названия)"
+    return (html_lib.unescape(re.sub(r"\s+", " ", m.group(1))).strip()
+            if m else "(без названия)")
 
 
 def load_meta(ident: str) -> dict:

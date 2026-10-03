@@ -20,6 +20,7 @@
 """
 
 import argparse
+import html as html_lib
 import json
 import re
 import sys
@@ -731,9 +732,11 @@ def probe(ident: str, timeout: float, retries: int) -> dict:
         else:
             m = re.search(r'<app-root[^>]*\bdata-title="([^"]*)"', html)
             if m:
-                return {"id": ident, "title": m.group(1).strip(), "date": now}
+                return {"id": ident, "title": html_lib.unescape(m.group(1)).strip(),
+                        "date": now}
             m = re.search(r"<title>(.*?)</title>", html, re.S)
-            title = re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
+            title = (html_lib.unescape(re.sub(r"\s+", " ", m.group(1))).strip()
+                     if m else "")
             return {"id": ident, "title": title or None,
                     "reason": None if title else "без заголовка", "date": now}
     return {"id": ident, "title": None, "reason": reason, "date": now}

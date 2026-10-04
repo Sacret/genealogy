@@ -2192,7 +2192,8 @@ def build(docs) -> tuple:
         "родословной</a>.</p>"
         "</section>"
         "<p class=author>Автор проекта — <a href='https://sacret.ru/'>"
-        "Анастасия Абакумова</a>.</p>"
+        "Анастасия Абакумова</a>. Сайт сделан с помощью "
+        "<a href='https://claude.com/claude-code'>Claude Code</a>.</p>"
         "<p class=build>Пересобирается автоматически при каждом поиске. "
         "Источник — <code>&lt;документ&gt;/searches.jsonl</code>.</p></footer>")
     out.append("</div>")   # .wrap

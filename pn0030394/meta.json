@@ -2,5 +2,11 @@
   "url": "https://vivaldi.dspl.ru/pn0030394",
   "title": "Донские областные ведомости: 1909, № 270 (30 декабря)",
   "pages": 4,
-  "dpi": 400
+  "dpi": 400,
+  "pruned": true,
+  "kept_pages": [
+    2,
+    3,
+    4
+  ]
 }

@@ -2,5 +2,10 @@
   "url": "https://vivaldi.dspl.ru/pn0030326",
   "title": "Донские областные ведомости: 1909, № 201 (29 сентября)",
   "pages": 4,
-  "dpi": 400
+  "dpi": 400,
+  "pruned": true,
+  "kept_pages": [
+    1,
+    2
+  ]
 }

@@ -2,5 +2,11 @@
   "url": "https://vivaldi.dspl.ru/pn0030379",
   "title": "Донские областные ведомости: 1909, № 255 (9 декабря)",
   "pages": 4,
-  "dpi": 400
+  "dpi": 400,
+  "pruned": true,
+  "kept_pages": [
+    1,
+    2,
+    4
+  ]
 }

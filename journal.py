@@ -1981,7 +1981,8 @@ def build(docs) -> tuple:
            "листы и лупа на светлом столе'>",
            f"<link rel='icon' href='{_favicon()}'>",
            f"<style>{CSS}</style></head><body>",
-           "<a href='https://github.com/Sacret/genealogy' class=github-corner "
+           "<a href='https://github.com/Sacret/genealogy' target=_blank "
+           "class=github-corner "
            "aria-label='Исходный код на GitHub'><svg width=80 height=80 "
            "viewBox='0 0 250 250' aria-hidden=true>"
            "<path d='M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z'></path>"

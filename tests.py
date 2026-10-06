@@ -850,6 +850,7 @@ def social_suite():
          and "property='og:image:width' content='1734'" in page
          and "property='og:image:height' content='907'" in page),
         ("OG alt", "property='og:image:alt'" in page),
+        ("OG logo", "property='og:logo' content='https://sacret.github.io/genealogy/logo.png'" in page),
         ("Twitter large image", "name=twitter:card content='summary_large_image'" in page),
         ("Twitter title", f"name=twitter:title content='{title}'" in page),
         ("Twitter description", f"name=twitter:description content='{description}'" in page),

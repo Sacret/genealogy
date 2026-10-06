@@ -45,6 +45,8 @@ SITE_TITLE = "Журнал генеалогических поисков"
 SITE_DESCRIPTION = ("Дореволюционные документы: какие фамилии по каким "
                     "делам уже проверены.")
 SOCIAL_IMAGE_URL = SITE_URL + "social-card.png"
+# Знак сайта для превью ссылок: тот же ять, что в favicon.ico, 256×256.
+LOGO_URL = SITE_URL + "logo.png"
 
 # Подтверждённое родство — это всегда чей-то предок поимённо, и журнал
 # называет его и уводит на страницу родословной (persons.json). Иначе
@@ -1982,6 +1984,7 @@ def build(docs) -> tuple:
            "<meta property='og:image:height' content='907'>",
            "<meta property='og:image:alt' content='Старинные книги, архивные "
            "листы и лупа на светлом столе'>",
+           f"<meta property='og:logo' content='{LOGO_URL}'>",
            "<meta name=twitter:card content='summary_large_image'>",
            f"<meta name=twitter:title content='{SITE_TITLE}'>",
            f"<meta name=twitter:description content='{SITE_DESCRIPTION}'>",

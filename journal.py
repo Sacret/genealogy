@@ -44,7 +44,7 @@ SITE_URL = "https://sacret.github.io/genealogy/"
 SITE_TITLE = "Журнал генеалогических поисков"
 SITE_DESCRIPTION = ("Дореволюционные документы: какие фамилии по каким "
                     "делам уже проверены.")
-SOCIAL_IMAGE_URL = SITE_URL + "social-card.png"
+SOCIAL_IMAGE_URL = SITE_URL + "social-card.jpg"
 # Знак сайта для превью ссылок: тот же ять, что в favicon.ico, 256×256.
 LOGO_URL = SITE_URL + "logo.png"
 
@@ -1979,9 +1979,9 @@ def build(docs) -> tuple:
            f"<meta property='og:description' content='{SITE_DESCRIPTION}'>",
            f"<meta property='og:url' content='{SITE_URL}'>",
            f"<meta property='og:image' content='{SOCIAL_IMAGE_URL}'>",
-           "<meta property='og:image:type' content='image/png'>",
-           "<meta property='og:image:width' content='1734'>",
-           "<meta property='og:image:height' content='907'>",
+           "<meta property='og:image:type' content='image/jpeg'>",
+           "<meta property='og:image:width' content='1200'>",
+           "<meta property='og:image:height' content='630'>",
            "<meta property='og:image:alt' content='Старинные книги, архивные "
            "листы и лупа на светлом столе'>",
            f"<meta property='og:logo' content='{LOGO_URL}'>",

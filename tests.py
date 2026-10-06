@@ -834,7 +834,7 @@ def social_suite():
     title = "Журнал генеалогических поисков"
     description = ("Дореволюционные документы: какие фамилии по каким "
                    "делам уже проверены.")
-    image = "https://sacret.github.io/genealogy/social-card.png"
+    image = "https://sacret.github.io/genealogy/social-card.jpg"
     checks = [
         ("title", f"<title>{title}</title>" in page),
         ("description", f"<meta name=description content='{description}'>" in page),
@@ -846,9 +846,9 @@ def social_suite():
         ("OG description", f"property='og:description' content='{description}'" in page),
         ("OG URL", "property='og:url' content='https://sacret.github.io/genealogy/'" in page),
         ("OG image", f"property='og:image' content='{image}'" in page),
-        ("размер и MIME картинки", "property='og:image:type' content='image/png'" in page
-         and "property='og:image:width' content='1734'" in page
-         and "property='og:image:height' content='907'" in page),
+        ("размер и MIME картинки", "property='og:image:type' content='image/jpeg'" in page
+         and "property='og:image:width' content='1200'" in page
+         and "property='og:image:height' content='630'" in page),
         ("OG alt", "property='og:image:alt'" in page),
         ("OG logo", "property='og:logo' content='https://sacret.github.io/genealogy/logo.png'" in page),
         ("Twitter large image", "name=twitter:card content='summary_large_image'" in page),

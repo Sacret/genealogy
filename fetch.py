@@ -11,7 +11,7 @@ API вьюера, найденный в его же JS (объект RouteConsta
 """
 
 import argparse, http.client, json, socket, sys, threading, time
-import urllib.parse
+import urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from docstore import UA, doc_base, doc_id, doc_dir, fetch_title, load_meta, save_meta
@@ -75,8 +75,20 @@ def get(url, referer, retries=5, timeout=30, deadline=60):
     path = u.path + (f"?{u.query}" if u.query else "")
     headers = {"User-Agent": UA, "Referer": referer}
 
+    # Прямое http.client не смотрит на HTTPS_PROXY, в отличие от urllib, и
+    # там, где наружу пускают только через прокси (облачная сессия), сайт
+    # отвечал 403, хотя curl той же страницы получал. Туннель — CONNECT.
+    proxy = urllib.request.getproxies().get(u.scheme)
+    if proxy and urllib.request.proxy_bypass(u.hostname):
+        proxy = None
+
     for attempt in range(retries):
-        conn = cls(u.netloc, timeout=timeout)
+        if proxy:
+            p = urllib.parse.urlsplit(proxy)
+            conn = cls(p.hostname, p.port, timeout=timeout)
+            conn.set_tunnel(u.netloc)
+        else:
+            conn = cls(u.netloc, timeout=timeout)
         stalled = threading.Event()
         guard = _watchdog(conn, deadline, stalled)
         try:

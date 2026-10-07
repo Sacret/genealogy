@@ -35,7 +35,7 @@ html, body {{ margin: 0; width: {w}px; height: {h}px; overflow: hidden;
   background: {bg}; color: {ink}; font-family: {font}; }}
 .c {{ height: 100%; display: flex; align-items: center; justify-content: center;
   gap: 64px; padding: 0 80px; box-sizing: border-box; }}
-img {{ width: {icon_size}px; height: {icon_size}px; flex: none; object-fit: contain; }}
+img {{ width: {icon_size}px; height: {icon_size}px; flex: none; object-fit: {fit}; border-radius: {radius}; }}
 h1 {{ margin: 0; font-size: {title_size}px; font-weight: {weight};
   letter-spacing: {spacing}; line-height: 1.05; }}
 p {{ margin: 22px 0 0; font-size: {sub_size}px; color: {muted}; font-weight: 500; }}
@@ -69,7 +69,8 @@ def render(args: argparse.Namespace) -> Path:
         page.write_text(PAGE.format(
             w=W, h=H, bg=args.bg, ink=args.ink, muted=args.muted,
             accent=args.accent, font=args.font, icon=html.escape(icon.name),
-            icon_size=args.icon_size, title_size=args.title_size,
+            icon_size=args.icon_size, radius=args.icon_radius,
+            fit="cover" if args.icon_radius != "0" else "contain", title_size=args.title_size,
             sub_size=args.sub_size, weight=args.weight,
             spacing=args.letter_spacing, title=html.escape(args.title),
             sub=f"<p>{html.escape(args.subtitle)}</p>" if args.subtitle else "",
@@ -105,6 +106,8 @@ def main() -> None:
     ap.add_argument("--weight", default="800", help="насыщенность названия")
     ap.add_argument("--letter-spacing", default="-0.03em")
     ap.add_argument("--icon-size", type=int, default=300)
+    ap.add_argument("--icon-radius", default="0",
+                    help="скругление иконки, CSS: 50%% — круг (для фото-аватарки)")
     ap.add_argument("--title-size", type=int, default=132,
                     help="для длинного названия в две строки — около 84")
     ap.add_argument("--sub-size", type=int, default=50)

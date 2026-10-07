@@ -1513,7 +1513,7 @@ def crops_for(ident, surname, pages):
         stem, _ = stem_query(surname)   # второе — позиции дореформенных литер
     except Exception:
         return []
-    d = ROOT / ident / "crops"
+    d = docstore.doc_dir(ident) / "crops"
     if not d.exists():
         return []
     out = []
@@ -1561,7 +1561,7 @@ def shot_page(ident: str, f: pathlib.Path):
     info = boxes.load(ident).get(f.name)
     if not info:
         return None
-    page = ROOT / ident / "scans" / f"p{int(info['page']):04d}.jpg"
+    page = docstore.doc_dir(ident) / "scans" / f"p{int(info['page']):04d}.jpg"
     if not page.exists():
         return None
     return page.relative_to(ROOT), info["box"], info["size"]
@@ -1773,7 +1773,7 @@ def coverage(ident):
     на такой странице был пропущен "Могучевъ".
     """
     import json as _json
-    d = ROOT / ident
+    d = docstore.doc_dir(ident)
     qf = d / "quality.json"
     if not qf.exists():
         return None

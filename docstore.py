@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Хранилище документов и журнал поисков.
 
-Каждый документ живёт в папке по своему идентификатору из URL:
+Каждый документ живёт в папке по своему идентификатору из URL, а папки
+разложены по префиксу и сотне номеров:
 
-    bv0000407/
+    vol/bv/00004/bv0000407/
         meta.json       заголовок, URL, число страниц, dpi
         scans/          pNNNN.jpg
         ocr/            pNNNN.txt
@@ -70,8 +71,22 @@ PREFIXES = ("bv", "ot", "pn", "bx", "pm", "br", "bc")
 DOC_ID = re.compile(r"(?:%s)\d{7}" % "|".join(PREFIXES))
 
 
+# Тома лежат не в корне, а в vol/<префикс>/<сотня>/: pn0024268 —
+# vol/pn/00242/pn0024268. Пока все полторы тысячи выпусков газеты стояли
+# в корне рядом со скриптами, GitHub показывал из корня только первую
+# тысячу записей, а скрипты терялись среди папок. Сотня — первые пять
+# цифр номера, так в одной папке не бывает больше ста томов.
+VOL = "vol"
+DOC_GLOB = f"{VOL}/*/*/*/meta.json"
+
+
+def doc_rel(ident: str) -> str:
+    """Путь тома от корня проекта: vol/pn/00242/pn0024268."""
+    return f"{VOL}/{ident[:2]}/{ident[2:7]}/{ident}"
+
+
 def doc_dir(ident: str) -> pathlib.Path:
-    return ROOT / ident
+    return ROOT / doc_rel(ident)
 
 
 def fetch_title(base_url: str) -> str:
@@ -234,11 +249,8 @@ def persons() -> dict:
 
 
 def documents() -> list:
-    """Все документы в корне: папка с meta.json — это документ."""
-    out = []
-    for meta in sorted(ROOT.glob("*/meta.json")):
-        out.append(meta.parent.name)
-    return out
+    """Все документы: папка с meta.json под vol/ — это документ."""
+    return sorted(meta.parent.name for meta in ROOT.glob(DOC_GLOB))
 
 
 def read_log(ident: str) -> list:

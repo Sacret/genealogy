@@ -1076,7 +1076,7 @@ def thumbs_suite():
     cell = html.split("<td class=result>")[1].split("</td>")[0]
     srcs = re.findall(r"<img alt='[^']*' src='([^']+)'", cell)
     files = [ROOT / src for src in srcs]
-    crop = sorted((ROOT / ident / "crops").glob(f"p00{page}_кармазин_*.png"))[0]
+    crop = sorted((docstore.doc_dir(ident) / "crops").glob(f"p00{page}_кармазин_*.png"))[0]
     thumb = crop.parent / THUMBS / crop.name
     checks = [
         ("картинки вырезок — файлы, а не data:URI",
@@ -1126,7 +1126,7 @@ def namesakes_suite():
     """
     bad = 0
     print("\nоднофамильцы на одной странице:")
-    crops = sorted((ROOT / "pn0024233" / "crops").glob("p0035_кармазин_*.png"))
+    crops = sorted((docstore.doc_dir("pn0024233") / "crops").glob("p0035_кармазин_*.png"))
     row = {"surname": "Кармазинъ", "status": "found", "date": "2026-01-01",
            "verdict": "", "confirmed": ["35"], "kin": ["35"],
            "persons": {"35": "i0117"},
@@ -1178,8 +1178,8 @@ def boxes_suite():
     bad = 0
     print("\nместо вырезки на странице:")
     ident, name = "bv0000043", "p0044_могучев_1.png"
-    crop = ROOT / ident / "crops" / name
-    scan = ROOT / ident / "scans" / "p0044.jpg"
+    crop = docstore.doc_dir(ident) / "crops" / name
+    scan = docstore.doc_dir(ident) / "scans" / "p0044.jpg"
     kept = boxes.load(ident).get(name, {})
     found = boxes.locate(scan, crop)
     # Та же вырезка, но чужая страница: совпадения быть не должно. Это и
@@ -1188,10 +1188,10 @@ def boxes_suite():
     # Страница должна храниться в Git: локальный кэш сканов богаче чистого
     # checkout, и прежняя p0048.jpg делала тест зелёным только на рабочей
     # машине. p0599.jpg — другая подтверждённая находка того же тома.
-    other = boxes.locate(ROOT / ident / "scans" / "p0599.jpg", crop)
+    other = boxes.locate(docstore.doc_dir(ident) / "scans" / "p0599.jpg", crop)
 
     place = shot_page(ident, crop)
-    gone = shot_page(ident, ROOT / ident / "crops" / "p0598_багрлмов_1.png")
+    gone = shot_page(ident, docstore.doc_dir(ident) / "crops" / "p0598_багрлмов_1.png")
 
     checks = [
         ("координаты записаны", bool(kept) and len(kept.get("box", [])) == 4),
@@ -1204,7 +1204,7 @@ def boxes_suite():
          bool(kept) and 0 <= kept["box"][0] < kept["box"][2] <= kept["size"][0]
          and 0 <= kept["box"][1] < kept["box"][3] <= kept["size"][1]),
         ("журнал знает страницу вырезки",
-         place is not None and str(place[0]) == f"{ident}/scans/p0044.jpg"),
+         place is not None and str(place[0]) == f"{docstore.doc_rel(ident)}/scans/p0044.jpg"),
         # Скан этой страницы выброшен prune.py, и предлагать её нечем:
         # ссылка на несуществующий файл хуже, чем её отсутствие.
         ("без скана страницы не предлагает", gone is None),
@@ -1270,7 +1270,7 @@ def tess_suite():
     tmp = tempfile.TemporaryDirectory()
     docstore.ROOT = pathlib.Path(tmp.name)
     try:
-        d = docstore.ROOT / "bv0000903"
+        d = docstore.doc_dir("bv0000903")
         (d / "scans").mkdir(parents=True)
         (d / "ocr").mkdir()
         scans = []
@@ -1397,12 +1397,12 @@ def queue_run_suite():
     tmp = tempfile.TemporaryDirectory()
     docstore.ROOT = pathlib.Path(tmp.name)
     try:
-        ready = docstore.ROOT / "bv0000911"
+        ready = docstore.doc_dir("bv0000911")
         (ready / "ocr").mkdir(parents=True)
         for n in (1, 2):
             (ready / "ocr" / f"p{n:04d}.txt").write_text("текст", encoding="utf-8")
         docstore.save_meta("bv0000911", pages=2, url="u", title="Том")
-        half = docstore.ROOT / "bv0000912"
+        half = docstore.doc_dir("bv0000912")
         (half / "ocr").mkdir(parents=True)
         (half / "ocr" / "p0001.txt").write_text("текст", encoding="utf-8")
         docstore.save_meta("bv0000912", pages=2, url="u", title="Том")
@@ -1499,7 +1499,7 @@ def stripes_suite():
     tmp = tempfile.TemporaryDirectory()
     docstore.ROOT = pathlib.Path(tmp.name)
     try:
-        d = docstore.ROOT / ident
+        d = docstore.doc_dir(ident)
         (d / "scans").mkdir(parents=True)
         for n in (1, 2, 3):
             (d / "scans" / f"p{n:04d}.jpg").write_bytes(b"x" * 2048)
@@ -1601,7 +1601,7 @@ def verdict_suite():
     docstore.ROOT = pathlib.Path(tmp.name)
     try:
         def make(ident, texts):
-            d = docstore.ROOT / ident
+            d = docstore.doc_dir(ident)
             (d / "ocr").mkdir(parents=True)
             for n, text in enumerate(texts, 1):
                 (d / "ocr" / f"p{n:04d}.txt").write_text(text, encoding="utf-8")

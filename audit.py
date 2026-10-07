@@ -391,7 +391,11 @@ def audit_project(root=ROOT):
     report = Report(root)
     root = report.root
     docs = {}
+    # Том в корне — след старой раскладки: скрипты его уже не видят.
     for path in sorted(root.glob("*/meta.json")):
+        report.error(path, f"том вне {docstore.VOL}/, его место — "
+                           f"{docstore.doc_rel(path.parent.name)}")
+    for path in sorted(root.glob(docstore.DOC_GLOB)):
         ident = path.parent.name
         meta = read_json(path, report)
         if meta is None:
@@ -399,6 +403,9 @@ def audit_project(root=ROOT):
         docs[ident] = meta
         if not DOC_ID.fullmatch(ident):
             report.error(path, "имя каталога не похоже на ID документа")
+        elif path.parent != root / docstore.doc_rel(ident):
+            report.error(path, f"том не на своём месте, его место — "
+                               f"{docstore.doc_rel(ident)}")
         for message in validate_meta(meta, ident):
             report.error(path, message)
 
@@ -451,7 +458,7 @@ def audit_project(root=ROOT):
     latest_findings = set()
     log_rows = 0
     for ident, meta in docs.items():
-        folder, total = root / ident, meta.get("pages")
+        folder, total = root / docstore.doc_rel(ident), meta.get("pages")
         if not isinstance(total, int) or total < 1:
             continue
         expected = set(range(1, total + 1))

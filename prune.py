@@ -112,8 +112,8 @@ MARK_END = "# --- конец списка находок ---"
 # `bv` в этом выражении её строка не опознавалась как уже стоящая в
 # файле, а дописывалась заново на каждом проходе. За один вечер
 # страница pn0024347 попала в .gitignore девять раз.
-KEEP_LINE = re.compile(r"^!([a-z]{2}\d+/scans/p\d+\.jpg)\s*$")
-ANCHOR = "*/scans/*"
+KEEP_LINE = re.compile(r"^!(vol/[a-z]{2}/\d{5}/[a-z]{2}\d+/scans/p\d+\.jpg)\s*$")
+ANCHOR = "vol/*/*/*/scans/*"
 
 
 def finding_pages() -> dict:
@@ -128,7 +128,7 @@ def finding_pages() -> dict:
                 continue
             kin = {str(p) for p in (rec.get("kin") or [])}
             for page in confirmed_pages(rec, total):
-                path = f"{ident}/scans/p{page:04d}.jpg"
+                path = f"{docstore.doc_rel(ident)}/scans/p{page:04d}.jpg"
                 note = f"{str(year) + ', ' if year else ''}{surname}"
                 if str(page) in kin:
                     note += ", родство подтверждено"

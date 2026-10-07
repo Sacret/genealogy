@@ -32,13 +32,13 @@
 
 import argparse, json, pathlib, sys
 
-from docstore import ROOT, allow_big_scans
+from docstore import allow_big_scans, doc_dir, documents
 
 NAME = "boxes.json"
 
 
 def path(ident: str) -> pathlib.Path:
-    return ROOT / ident / "crops" / NAME
+    return doc_dir(ident) / "crops" / NAME
 
 
 def load(ident: str) -> dict:
@@ -132,7 +132,7 @@ def locate(page: pathlib.Path, crop: pathlib.Path):
 
 def crops(ident: str):
     """Файлы вырезок документа: `pNNNN_основа_N.png`, по возрастанию."""
-    d = ROOT / ident / "crops"
+    d = doc_dir(ident) / "crops"
     if not d.exists():
         return []
     out = []
@@ -153,7 +153,7 @@ def rebuild(ident: str, fetch=False, force=False) -> tuple:
     for page, f in crops(ident):
         if f.name in data and not force:
             continue
-        img = ROOT / ident / "scans" / f"p{page:04d}.jpg"
+        img = doc_dir(ident) / "scans" / f"p{page:04d}.jpg"
         if not img.exists():
             if not fetch:
                 skip += 1
@@ -187,7 +187,7 @@ def main():
     a = ap.parse_args()
 
     idents = a.idents or sorted(
-        p.parent.name for p in ROOT.glob("*/crops") if p.is_dir())
+        i for i in documents() if (doc_dir(i) / "crops").is_dir())
     done = skip = 0
     for ident in idents:
         if not crops(ident):

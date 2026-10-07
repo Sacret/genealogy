@@ -35,7 +35,7 @@ html, body {{ margin: 0; width: {w}px; height: {h}px; overflow: hidden;
   background: {bg}; color: {ink}; font-family: {font}; }}
 .c {{ height: 100%; display: flex; align-items: center; justify-content: center;
   gap: 64px; padding: 0 80px; box-sizing: border-box; }}
-img {{ width: {icon_size}px; height: {icon_size}px; flex: none; }}
+img {{ width: {icon_size}px; height: {icon_size}px; flex: none; object-fit: contain; }}
 h1 {{ margin: 0; font-size: {title_size}px; font-weight: {weight};
   letter-spacing: {spacing}; line-height: 1.05; }}
 p {{ margin: 22px 0 0; font-size: {sub_size}px; color: {muted}; font-weight: 500; }}

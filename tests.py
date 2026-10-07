@@ -832,9 +832,9 @@ def social_suite():
     print("\nпревью для соцсетей:")
     page = render({})
     title = "Журнал генеалогических поисков"
-    description = ("Дореволюционные документы: какие фамилии по каким "
+    description = ("Исторические документы: какие фамилии по каким "
                    "делам уже проверены.")
-    image = "https://sacret.github.io/genealogy/social-card.jpg"
+    image = "https://sacret.github.io/genealogy/og-image.jpg"
     checks = [
         ("title", f"<title>{title}</title>" in page),
         ("description", f"<meta name=description content='{description}'>" in page),

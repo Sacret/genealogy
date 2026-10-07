@@ -42,9 +42,9 @@ MAYBE_LABEL = "найдена, родство не установлено"
 
 SITE_URL = "https://sacret.github.io/genealogy/"
 SITE_TITLE = "Журнал генеалогических поисков"
-SITE_DESCRIPTION = ("Дореволюционные документы: какие фамилии по каким "
+SITE_DESCRIPTION = ("Исторические документы: какие фамилии по каким "
                     "делам уже проверены.")
-SOCIAL_IMAGE_URL = SITE_URL + "social-card.jpg"
+SOCIAL_IMAGE_URL = SITE_URL + "og-image.jpg"
 # Знак сайта для превью ссылок: тот же ять, что в favicon.ico, 256×256.
 LOGO_URL = SITE_URL + "logo.png"
 
@@ -1982,8 +1982,8 @@ def build(docs) -> tuple:
            "<meta property='og:image:type' content='image/jpeg'>",
            "<meta property='og:image:width' content='1200'>",
            "<meta property='og:image:height' content='630'>",
-           "<meta property='og:image:alt' content='Старинные книги, архивные "
-           "листы и лупа на светлом столе'>",
+           "<meta property='og:image:alt' content='Ять и надпись «Журнал "
+           "генеалогических поисков»'>",
            f"<meta property='og:logo' content='{LOGO_URL}'>",
            "<meta name=twitter:card content='summary_large_image'>",
            f"<meta name=twitter:title content='{SITE_TITLE}'>",
@@ -2218,7 +2218,7 @@ def build(docs) -> tuple:
     out.append(
         "<footer><section aria-labelledby=about-title>"
         "<h2 id=about-title>О журнале</h2>"
-        "<p>Это рабочий журнал поиска людей в дореволюционных книгах, "
+        "<p>Это рабочий журнал поиска людей в исторических книгах, "
         "газетах и официальных изданиях. Каждая строка — проверка одной "
         "фамилии в одном документе: сначала OCR находит возможные "
         "совпадения, затем они сверяются со сканом глазами.</p>"

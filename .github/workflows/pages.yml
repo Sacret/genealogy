@@ -18,7 +18,7 @@ on:
       - journal.html
       - "journal/**"
       - favicon.ico
-      - social-card.jpg
+      - og-image.jpg
       - logo.png
       - "*/crops/**"
       - "*/scans/**"
@@ -49,7 +49,7 @@ jobs:
           set -eu
           mkdir -p site
           cp journal.html site/index.html
-          cp favicon.ico social-card.jpg logo.png site/
+          cp favicon.ico og-image.jpg logo.png site/
           # Списки «Ничего не найдено» по годам: страница подгружает их
           # сама, когда до них доходят (journal.py, NILS_DIR).
           cp -r journal site/

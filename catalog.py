@@ -4,6 +4,7 @@
     python3 catalog.py                    # добрать новые id и пересобрать documents.json
     python3 catalog.py --to 800           # раздвинуть каталог до bv0000800
     python3 catalog.py --range 500-800    # опросить только этот отрезок
+    python3 catalog.py --prefix pn --rnb --range 170045-170089   # РНБ
     python3 catalog.py --recheck          # перезапросить id, которые не ответили
     python3 catalog.py --rebuild          # без сети: пересобрать из кэша
 
@@ -29,11 +30,12 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-from docstore import ROOT, UA, latest_verdicts, load_meta, meta_year
+from docstore import (LIBRARIES, ROOT, UA, latest_verdicts, library_of,
+                      load_meta, meta_year)
 
 CATALOG = ROOT / "catalog.jsonl"
 DOCUMENTS = ROOT / "documents.json"
-LIBRARY = "https://vivaldi.dspl.ru"
+LIBRARY = LIBRARIES[7]
 DEFAULT_CEILING = 500
 
 
@@ -56,9 +58,12 @@ ORDERS = re.compile(r"Приказы по войску Донскому", re.I)
 # областная газета; по году она встаёт в конец газетной очереди.
 # «Приазовский край» — ростовская ежедневная газета; взята ради сентября
 # 1915 года, которого в «Ведомостях» нет (pn0005945 и дальше).
+# «Вольный Дон» — те же «Ведомости» после переименования 1917 года, с
+# продолжением их нумерации (№ 171 от 1 ноября); лежит в РНБ.
 NEWSPAPER = re.compile(r"Донские областные ведомости|Казачий вестник"
                        r"|Донской справочный листок|^Молот:"
-                       r"|^Приазовский край:", re.I)
+                       r"|^Приазовский край:|^Вольный Дон\.", re.I)
+VEDOMOSTI = re.compile(r"^(?:Донские областные ведомости|Вольный Дон\.)")
 
 # Именная роспись сильнее тематического отсева. «Адрес-календарь
 # служащих Владикавказской железной дороги» — это перечень людей с
@@ -118,6 +123,8 @@ SKIP = re.compile("|".join([
     r"славы Кубанцев",
     r"Законодательные акты, вызванные войною",
     r"Пути сообщения на театре войны",
+    # Петроградская газета, соседка «Вольного Дона» по нумерации РНБ.
+    r"^Вечернее время\.",
 ]), re.I)
 
 COSSACK = re.compile("|".join([
@@ -639,8 +646,8 @@ QUEUES = ("1_приказы_по_войску_донскому",
 
 # --- кэш заголовков ---------------------------------------------------
 
-def ident_of(n: int, prefix: str = "bv") -> str:
-    return "%s%07d" % (prefix, n)
+def ident_of(n: int, prefix: str = "bv", width: int = 7) -> str:
+    return "%s%0*d" % (prefix, width, n)
 
 
 def number_of(ident: str) -> int:
@@ -651,9 +658,26 @@ def prefix_of(ident: str) -> str:
     return ident[:2]
 
 
+def width_of(ident: str) -> int:
+    """Длина номера: 7 — ДГПБ, 9 — РНБ. Нумерации у библиотек свои."""
+    return len(ident) - 2
+
+
 MONTHS = {m: i for i, m in enumerate(
     "января февраля марта апреля мая июня июля августа сентября "
     "октября ноября декабря".split(), 1)}
+
+
+def month_of(word: str) -> int:
+    """Номер месяца по слову из заглавия, полному или сокращённому.
+
+    РНБ сокращает месяц («1 нояб.»), ДГПБ пишет целиком («1 ноября»).
+    Первых трёх букв хватает: у всех двенадцати они разные.
+    """
+    for name, i in MONTHS.items():
+        if word[:3] == name[:3]:
+            return i
+    return 0
 
 
 def issue_order(title: str) -> tuple:
@@ -667,7 +691,7 @@ def issue_order(title: str) -> tuple:
     """
     d = re.search(r"\((\d+)\s+([а-я]+)", title)
     n = re.search(r"№\s*(\d+)", title)
-    month, day = (MONTHS.get(d.group(2), 0), int(d.group(1))) if d else (0, 0)
+    month, day = (month_of(d.group(2)), int(d.group(1))) if d else (0, 0)
     return month, day, int(n.group(1)) if n else 0
 
 
@@ -717,7 +741,7 @@ def probe(ident: str, timeout: float, retries: int) -> dict:
     есть (bv0000000 не отвечает и за минуту) — они запоминаются как
     «нет ответа» и переспрашиваются только по `--recheck`.
     """
-    url = f"{LIBRARY}/{ident}/view/"
+    url = f"{library_of(ident)}/{ident}/view/"
     now = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
     reason = "нет ответа"
     for _ in range(retries):
@@ -840,7 +864,8 @@ def build(catalog: dict) -> dict:
     работа на середине, и в очереди он нужнее, чем в отчёте о сделанном.
     """
     out = {
-        "источник": f"{LIBRARY}/ (ДГПБ, Vivaldi)",
+        "источник": f"{LIBRARY}/ (ДГПБ, Vivaldi); номера в девять цифр — "
+                    f"{LIBRARIES[9]}/ (РНБ)",
         "диапазон": {},
         "собрано": datetime.now().date().isoformat(),
         "просмотрены": [],
@@ -858,7 +883,8 @@ def build(catalog: dict) -> dict:
                 {"id": ident, "причина": cached.get("reason")})
             continue
 
-        rec = {"id": ident, "url": f"{LIBRARY}/{ident}/view/", "title": title}
+        rec = {"id": ident, "url": f"{library_of(ident)}/{ident}/view/",
+               "title": title}
         # У скачанного тома год мог быть проставлен руками в meta.json —
         # заголовки вроде «Новочеркасск: справочная книжка» о нём молчат,
         # и без этого документ выпадал бы из хронологии и здесь, и в журнале.
@@ -911,7 +937,7 @@ def build(catalog: dict) -> dict:
     # февраль 1911-го), и очередь по id читалась бы вразнобой.
     # «Донские областные ведомости» — раньше любых других газет.
     out["очередь"]["4_газеты"].sort(
-        key=lambda r: (not r["title"].startswith("Донские областные ведомости"),
+        key=lambda r: (not VEDOMOSTI.match(r["title"]),
                        r.get("год") or 0, issue_order(r["title"]), r["id"]))
 
     # Плохие сканы — в конец своей очереди. Сортировка устойчива, так что
@@ -932,10 +958,12 @@ def build(catalog: dict) -> dict:
     # разбиваются на подряд идущие участки, и там, где участок один,
     # значение остаётся строкой, как и раньше; там, где их несколько —
     # списком строк в порядке возрастания.
+    # Номера РНБ — отдельный разряд «pn_рнб»: pn000170045 не сосед
+    # pn0170044, и общий ряд склеил бы чужие нумерации.
     nums_by_prefix = {}
     for ident in catalog:
-        p, n = prefix_of(ident), number_of(ident)
-        nums_by_prefix.setdefault(p, []).append(n)
+        key = (prefix_of(ident), width_of(ident))
+        nums_by_prefix.setdefault(key, []).append(number_of(ident))
 
     def runs(nums: list) -> list:
         nums = sorted(nums)
@@ -951,10 +979,11 @@ def build(catalog: dict) -> dict:
         return segments
 
     diapazon = {}
-    for p, nums in sorted(nums_by_prefix.items()):
-        segments = [f"{ident_of(lo, p)} — {ident_of(hi, p)}"
+    for (p, w), nums in sorted(nums_by_prefix.items()):
+        segments = [f"{ident_of(lo, p, w)} — {ident_of(hi, p, w)}"
                     for lo, hi in runs(nums)]
-        diapazon[p] = segments[0] if len(segments) == 1 else segments
+        key = p if w == 7 else f"{p}_рнб"
+        diapazon[key] = segments[0] if len(segments) == 1 else segments
     out["диапазон"] = diapazon
     # Номера могли опрашиваться отрезками, так что границы ещё не значат,
     # что между ними спрошено всё: сколько именно — говорит это число.
@@ -1015,8 +1044,8 @@ MONTH_NAMES = ("январь февраль март апрель май июн�
                "октябрь ноябрь декабрь").split()
 MONTHS_GEN = {i: m for m, i in MONTHS.items()}
 VEDOMOSTI_ISSUE = re.compile(
-    r"^Донские областные ведомости: (\d{4})[,.]?\s*(?:№\s*)?(\d+)\s*"
-    r"\((\d+)\s+([а-я]+)\)")
+    r"^(?:Донские областные ведомости:|Вольный Дон\.) (\d{4})[,.]?\s*"
+    r"(?:№\s*)?(\d+)\s*\((\d+)\s+([а-я]+)\.?\)")
 
 
 def vedomosti_by_year(catalog: dict, out: dict) -> dict:
@@ -1056,10 +1085,10 @@ def vedomosti_by_year(catalog: dict, out: dict) -> dict:
     years = {}
     for ident, cached in catalog.items():
         m = VEDOMOSTI_ISSUE.match(cached.get("title") or "")
-        if not m or m.group(4) not in MONTHS:
+        if not m or not month_of(m.group(4)):
             continue
         y, n, day, month = (int(m.group(1)), int(m.group(2)),
-                            int(m.group(3)), MONTHS[m.group(4)])
+                            int(m.group(3)), month_of(m.group(4)))
         years.setdefault(y, []).append((n, month, day, ident))
 
     def date_of(y, month, day):
@@ -1125,11 +1154,13 @@ def vedomosti_by_year(catalog: dict, out: dict) -> dict:
                 # Выпуск бывает в описи, но скан не открывается: номер
                 # библиотеки между соседями отвечает 404. Это не дыра в
                 # подшивке, а битая ссылка — её стоит назвать.
-                if prefix_of(a[3]) == prefix_of(b[3]):
+                if (prefix_of(a[3]), width_of(a[3])) == (prefix_of(b[3]),
+                                                         width_of(b[3])):
                     lo_id, hi_id = sorted((number_of(a[3]), number_of(b[3])))
-                    broken = [ident_of(k, prefix_of(a[3]))
+                    p, w = prefix_of(a[3]), width_of(a[3])
+                    broken = [ident_of(k, p, w)
                               for k in range(lo_id + 1, hi_id)
-                              if ident_of(k, prefix_of(a[3])) in dead]
+                              if ident_of(k, p, w) in dead]
                     if broken:
                         text += (f"; в описи есть {', '.join(broken)}, "
                                  f"но скан не открывается (404)")
@@ -1233,6 +1264,9 @@ def main():
     ap.add_argument("--prefix", default="bv", metavar="XX",
                     help="что опрашивать: bv — книги, pn — газеты "
                          "(с любым, кроме bv, нужен --range)")
+    ap.add_argument("--rnb", action="store_true",
+                    help="опрашивать РНБ (vivaldi.nlr.ru, девятизначные "
+                         "номера), а не ДГПБ")
     ap.add_argument("--to", type=int, metavar="N",
                     help="раздвинуть каталог до номера N включительно")
     ap.add_argument("--recheck", action="store_true",
@@ -1248,7 +1282,9 @@ def main():
     # Опрошенное считается внутри одного префикса: нумерации у них
     # разные, и bv0000011 не становится опрошенным оттого, что есть
     # ot0000011.
-    known = {number_of(i) for i in catalog if prefix_of(i) == a.prefix}
+    width = 9 if a.rnb else 7
+    known = {number_of(i) for i in catalog
+             if prefix_of(i) == a.prefix and width_of(i) == width}
 
     if not a.rebuild:
         if a.range:
@@ -1265,17 +1301,16 @@ def main():
         if a.to is not None:
             hi = max(hi, a.to)
 
-        todo = [ident_of(n, a.prefix) for n in range(lo, hi + 1)
+        todo = [ident_of(n, a.prefix, width) for n in range(lo, hi + 1)
                 if n not in known
                 or (a.recheck
-                    and not catalog[ident_of(n, a.prefix)].get("title"))]
+                    and not catalog[ident_of(n, a.prefix, width)].get("title"))]
+        first, last = ident_of(lo, a.prefix, width), ident_of(hi, a.prefix, width)
         if todo:
-            print(f"опрашиваю {len(todo)} номеров ({ident_of(lo, a.prefix)} — "
-                  f"{ident_of(hi, a.prefix)})", flush=True)
+            print(f"опрашиваю {len(todo)} номеров ({first} — {last})", flush=True)
             catalog.update(scan(todo, a.workers, a.timeout, a.retries))
         else:
-            print(f"новых номеров в {ident_of(lo, a.prefix)} — "
-                  f"{ident_of(hi, a.prefix)} нет")
+            print(f"новых номеров в {first} — {last} нет")
 
     out = build(catalog)
     write(out)

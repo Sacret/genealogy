@@ -557,6 +557,35 @@ def vedomosti_suite():
         ("потерянный номер назван", any(g.startswith("№ 229") for g in gaps)),
         ("404 названо по id", any("pn0000006" in g for g in gaps)),
     ]
+
+    # «Вольный Дон» — те же «Ведомости» после переименования, из РНБ:
+    # девятизначный номер и сокращённый месяц («1 нояб.»). Ряд один,
+    # и дыра между апрелем и ноябрём — пропуск в этом ряду.
+    from catalog import build
+    from docstore import DOC_ID, library_of
+    cat = {
+        "pn0000001": {"title": "Донские областные ведомости: 1917, № 74 (2 апреля)"},
+        "pn000000002": {"title": "Вольный Дон. 1917, № 171 (1 нояб.)"},
+        "pn000000003": {"title": "Вольный Дон. 1917,№ 197 (2 дек.) ."},
+    }
+    out = {"просмотрены": [{"id": "pn0000001"}], "в_работе": [],
+           "очередь": {"4_газеты": []}, "нет_документа": []}
+    rows = vedomosti_by_year(cat, out).get("1917", {}).get("ряды", {})
+    gaps = [g for r in rows.values() for v in r["пропущены_номера"].values()
+            for g in v]
+    built = build({i: {"id": i, **r} for i, r in cat.items()})
+    checks += [
+        ("«Вольный Дон» продолжает ряд «Ведомостей»", list(rows) == ["выпуски"]),
+        ("сокращённый месяц понят", any(g.startswith("№ 75-170") for g in gaps)),
+        ("девять цифр — РНБ", library_of("pn000170045") == "https://vivaldi.nlr.ru"
+         and library_of("pn0010168") == "https://vivaldi.dspl.ru"),
+        ("номер РНБ не обрезается до семи цифр",
+         DOC_ID.findall("pn000170045, pn0010168") == ["pn000170045", "pn0010168"]),
+        ("ряд РНБ — отдельный диапазон",
+         built["диапазон"].get("pn_рнб") == "pn000000002 — pn000000003"),
+        ("ссылка ведёт в РНБ", any(r["url"].startswith("https://vivaldi.nlr.ru/")
+                                   for r in built["очередь"]["4_газеты"])),
+    ]
     for name, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {name}")

@@ -1086,14 +1086,18 @@ def vedomosti_by_year(catalog: dict, out: dict) -> dict:
     попавший в самую длинную неубывающую цепочку дат, помечается. Такие
     выпуски не берутся в соседи пропуска, чтобы не врать о его месяце.
 
-    Берутся только годы, в которых что-то уже просмотрено: остальные
-    годы опрошены не целиком (1913 и 1914 вовсе лежат в неопрошенных
-    отрезках pn), и «месяца нет» о них значило бы «не спрашивали».
+    Берутся только годы, взятые в работу: хоть один выпуск просмотрен,
+    читается или стоит в очереди. Год, чьи номера лишь мелькнули в
+    каталоге, опрошен не целиком, и «месяца нет» о нём значило бы «не
+    спрашивали». Сначала годом в работе считался только просмотренный, и
+    1913 и 1914, опрошенные целиком и поставленные в очередь, в разрез
+    не попадали — хотя их пропуски видны уже до чтения.
     """
     seen = {r["id"] for r in out["просмотрены"]}
     working = {r["id"] for r in out["в_работе"]}
     queued = {r["id"] for r in out["очередь"]["4_газеты"]}
     dead = {r["id"] for r in out["нет_документа"]}
+    taken = seen | working | queued
     years = {}
     for ident, cached in catalog.items():
         m = VEDOMOSTI_ISSUE.match(issue_title(cached.get("title") or ""))
@@ -1126,7 +1130,7 @@ def vedomosti_by_year(catalog: dict, out: dict) -> dict:
     result = {}
     for y in sorted(years):
         issues = years[y]
-        if not any(i[3] in seen for i in issues):
+        if not any(i[3] in taken for i in issues):
             continue
         series = {}
         for it in issues:

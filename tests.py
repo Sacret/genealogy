@@ -586,6 +586,21 @@ def vedomosti_suite():
         ("ссылка ведёт в РНБ", any(r["url"].startswith("https://vivaldi.nlr.ru/")
                                    for r in built["очередь"]["4_газеты"])),
     ]
+
+    # «№1914, 175 (2 авг.)» у pn0001174: знак номера перед годом. Выпуск
+    # должен остаться в ряду, а не числиться потерянным.
+    T = "Донские областные ведомости: {}"
+    cat = {
+        "pn0000001": {"title": T.format("1914, № 174 (1 авг.)")},
+        "pn0000002": {"title": T.format("№1914, 175 (2 авг.)")},
+        "pn0000003": {"title": T.format("1914, № 176 (3 авг.)")},
+    }
+    rows = vedomosti_by_year(cat, out).get("1914", {}).get("ряды", {})
+    checks += [
+        ("переставленный знак номера понят",
+         rows.get("выпуски", {}).get("выпусков") == 3
+         and not rows["выпуски"]["пропущены_номера"]),
+    ]
     for name, ok in checks:
         bad += not ok
         print(f"  [{'ok ' if ok else 'FAIL'}] {name}")

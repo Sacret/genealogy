@@ -125,6 +125,9 @@ SKIP = re.compile("|".join([
     r"Пути сообщения на театре войны",
     # Петроградская газета, соседка «Вольного Дона» по нумерации РНБ.
     r"^Вечернее время\.",
+    # Иллюстрированное приложение екатеринодарской газеты, сосед 1914 года
+    # «Ведомостей» по нумерации pn (pn0000990 — pn0000999).
+    r"^Утро Юга: иллюстрированное приложение",
 ]), re.I)
 
 COSSACK = re.compile("|".join([
@@ -689,6 +692,7 @@ def issue_order(title: str) -> tuple:
     ряды в чередование. Дата различает, а номер остаётся третьим
     ключом — на случай двух выпусков одного дня.
     """
+    title = issue_title(title)
     d = re.search(r"\((\d+)\s+([а-я]+)", title)
     n = re.search(r"№\s*(\d+)", title)
     month, day = (month_of(d.group(2)), int(d.group(1))) if d else (0, 0)
@@ -1046,6 +1050,14 @@ MONTHS_GEN = {i: m for m, i in MONTHS.items()}
 VEDOMOSTI_ISSUE = re.compile(
     r"^(?:Донские областные ведомости:|Вольный Дон\.) (\d{4})[,.]?\s*"
     r"(?:№\s*)?(\d+)\s*\((\d+)\s+([а-я]+)\.?\)")
+# Знак номера перед годом: «№1914, 175 (2 авг.)» у pn0001174. Без
+# перестановки выпуск выпал бы из разреза, и № 175 числился бы потерянным.
+SWAPPED_NUMBER = re.compile(r"№\s*(\d{4}),\s*(\d+)")
+
+
+def issue_title(title: str) -> str:
+    """Заголовок выпуска с переставленным на место знаком номера."""
+    return SWAPPED_NUMBER.sub(r"\1, № \2", title)
 
 
 def vedomosti_by_year(catalog: dict, out: dict) -> dict:
@@ -1084,7 +1096,7 @@ def vedomosti_by_year(catalog: dict, out: dict) -> dict:
     dead = {r["id"] for r in out["нет_документа"]}
     years = {}
     for ident, cached in catalog.items():
-        m = VEDOMOSTI_ISSUE.match(cached.get("title") or "")
+        m = VEDOMOSTI_ISSUE.match(issue_title(cached.get("title") or ""))
         if not m or not month_of(m.group(4)):
             continue
         y, n, day, month = (int(m.group(1)), int(m.group(2)),

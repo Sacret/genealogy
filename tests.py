@@ -146,7 +146,7 @@ def events_suite():
             "type": "election", "description": "Избран в комиссию",
             "document": "pn0024347", "page": 4,
             "certainty": "confirmed", "basis": "explicit"}
-    roster = {"i0026": {}}
+    roster = {"i0026": {}, "i0209": {}}
     docs = {"pn0024347": {"pages": 4}}
     cases = [
         ("правильная запись", base, []),
@@ -160,6 +160,11 @@ def events_suite():
          ["неизвестный документ bv9999999"]),
         ("плохая уверенность", {**base, "certainty": "sure"},
          ["неизвестная certainty"]),
+        ("второй участник", {**base, "others": ["i0209"]}, []),
+        ("неизвестный участник", {**base, "others": ["i9999"]},
+         ["неизвестная персона i9999"]),
+        ("участник повторяет главного", {**base, "others": ["i0026"]},
+         ["i0026 уже указан в person"]),
     ]
     bad = 0
     for label, event, expected in cases:

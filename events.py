@@ -61,6 +61,17 @@ def validate_event(event, roster=None, known_documents=None):
 
     if roster is not None and event.get("person") not in roster:
         errors.append(f"неизвестная персона {event.get('person')}")
+    # Другие люди, которых событие касается наравне с главным: совладельцы,
+    # супруги в одном объявлении. Главный — в person, остальные — здесь.
+    others = event.get("others", [])
+    if not isinstance(others, list):
+        errors.append("others должен быть списком")
+        others = []
+    for pid in others:
+        if pid == event.get("person"):
+            errors.append(f"{pid} уже указан в person")
+        elif roster is not None and pid not in roster:
+            errors.append(f"неизвестная персона {pid}")
     if known_documents is not None:
         meta = known_documents.get(event.get("document"))
         if meta is None:
@@ -149,6 +160,7 @@ def main():
     add.add_argument("--description", required=True)
     add.add_argument("--document", required=True)
     add.add_argument("--page", required=True, type=int)
+    add.add_argument("--others", nargs="+", help="другие участники события")
     add.add_argument("--quote")
     add.add_argument("--place")
     add.add_argument("--role")
@@ -168,7 +180,8 @@ def main():
             print(f"события: {len(records)}, ошибок нет")
         elif args.action == "list":
             rows = [r for r in records
-                    if not args.person or r.get("person") == args.person]
+                    if not args.person or r.get("person") == args.person
+                    or args.person in r.get("others", [])]
             roster = persons()
             for row in sorted(rows, key=lambda r: (r["date"], r["id"])):
                 name = roster.get(row["person"], {}).get("имя", row["person"])

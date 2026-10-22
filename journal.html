@@ -3807,12 +3807,15 @@ if (anchorTarget() && 'scrollRestoration' in history) {
 // Прокрутка дважды: сразу — чтобы не мелькнул верх страницы, и на load —
 // когда догрузился шрифт и шапка перемерена, иначе дело съехало бы на её
 // разницу. Если человек успел прокрутить сам, второй раз его не дёргаем.
+// Флаг сбрасывается каждым наведением: прокрутил человек до перехода по
+// ссылке — это не повод бросать доводку после него.
 let moved = false;
 ['wheel', 'touchstart', 'keydown'].forEach(t =>
-  addEventListener(t, () => { moved = true; }, {once: true, passive: true}));
+  addEventListener(t, () => { moved = true; }, {passive: true}));
 function toAnchor(settle) {
   const el = anchorTarget();
   if (!el) return;
+  moved = false;
   el.scrollIntoView();
   if (!settle) return;
   // Высота дел за экраном — оценка (content-visibility в стилях), и чем
@@ -3836,6 +3839,17 @@ function toAnchor(settle) {
 }
 toAnchor(true);
 addEventListener('load', () => { if (!moved) toAnchor(true); });
+// Переход по ссылке внутри страницы — пузырь года, ссылка между делами —
+// промахивается так же: под фильтром найденные карточки раскрыты, и
+// настоящая высота дел выше цели во много раз больше оценки свёрнутой.
+// Браузер прыгает по оценке, поэтому после его прыжка наводимся сами.
+// Ссылка на якорь, который уже в адресе, hashchange не даёт — её ловим
+// кликом, после того как браузер сделал свой прыжок.
+addEventListener('hashchange', () => toAnchor(true));
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href^="#"]');
+  if (a && a.hash === location.hash) setTimeout(() => toAnchor(true));
+});
 
 // Наверх — и якорь из адреса долой: иначе перезагрузка унесла бы обратно к
 // делу, от которого только что ушли. Фильтр в параметрах остаётся.

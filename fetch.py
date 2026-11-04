@@ -97,7 +97,10 @@ def get(url, referer, retries=5, timeout=30, deadline=60):
             if r.status != 200:
                 raise OSError(f"HTTP {r.status} {r.reason}")
             return r.read()
-        except OSError as e:            # URLError, ConnectionResetError, таймауты
+        except (OSError, http.client.HTTPException) as e:
+            # OSError — URLError, ConnectionResetError, таймауты. Обрыв тела
+            # ответа на середине приходит как IncompleteRead, а он не OSError:
+            # 14 дек. 2026 г. так упал весь прогон pn0001286 без единого повтора.
             if stalled.is_set():
                 e = Stalled(f"нет ответа за {deadline} с")
             if attempt == retries - 1:
@@ -176,7 +179,7 @@ def main():
         dst = out / f"p{n:04d}.jpg"
         try:
             data = get(f"{base}/page/{n}/image/{a.dpi}", referer)
-        except OSError as e:
+        except (OSError, http.client.HTTPException) as e:
             # Одна безнадёжная страница не должна ронять прогон на сотни
             # страниц: запоминаем и идём дальше, добрать можно повтором.
             with lock:

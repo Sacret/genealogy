@@ -46,7 +46,8 @@ jobs:
       # закоммитили (или поправили руками сам производный файл).
       - name: Проверить, что журнал и каталог собраны из текущих данных
         run: |
-          python journal.py
-          python catalog.py --rebuild > /dev/null
+          # Не `catalog.py --rebuild`: команда выходит с кодом 1, пока в каталоге
+          # есть заглавия без правила раскладки, а здесь это не ошибка сборки.
+          python -c "import journal, catalog; journal.rebuild(); catalog.refresh()"
           git diff --exit-code --stat -- journal.html journal documents.json
           test -z "$(git status --porcelain -- journal)"

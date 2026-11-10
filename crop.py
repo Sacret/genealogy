@@ -24,7 +24,7 @@
 нему ни одного кандидата даже при расширенном пороге.
 """
 
-import argparse, csv, io, json, pathlib, subprocess, sys, tempfile
+import argparse, csv, io, json, pathlib, subprocess, tempfile
 
 import boxes
 from docstore import allow_big_scans, doc_dir

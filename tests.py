@@ -85,6 +85,7 @@ def main():
            + years_suite() + title_year_suite() + compact_suite() + social_suite() + chips_suite()
            + persons_suite() + doclinks_suite()
            + pagelist_suite() + bigscan_suite() + thumbs_suite()
+           + atomic_suite() + tools_suite()
            + namesakes_suite()
            + pamyatnye_suite() + vedomosti_suite() + gitignore_suite()
            + boxes_suite()
@@ -1076,6 +1077,73 @@ def bigscan_suite():
     return bad
 
 
+def atomic_suite():
+    """Прерванная запись не должна оставлять обрубок на месте файла.
+
+    `meta.json`, `documents.json`, `journal.html` и список находок в
+    `.gitignore` переписываются целиком при каждом поиске. Запись идёт
+    под временным именем и встаёт на место переименованием: упавшая
+    на середине оставляет прежний файл нетронутым.
+    """
+    import pathlib
+    import tempfile
+    from docstore import write_atomic
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = pathlib.Path(tmp) / "meta.json"
+        write_atomic(path, "первый")
+        created = path.read_text(encoding="utf-8") == "первый"
+        write_atomic(path, "второй")
+        replaced = path.read_text(encoding="utf-8") == "второй"
+        clean = [f.name for f in pathlib.Path(tmp).iterdir()] == ["meta.json"]
+        try:
+            write_atomic(path, "обрыв \udcff на середине")   # не кодируется
+            failed = False
+        except UnicodeEncodeError:
+            failed = True
+        kept = path.read_text(encoding="utf-8") == "второй"
+        swept = [f.name for f in pathlib.Path(tmp).iterdir()] == ["meta.json"]
+    checks = [
+        ("новый файл создаётся", created),
+        ("старый заменяется целиком", replaced),
+        ("временного имени не остаётся", clean),
+        ("сбой записи виден вызывающему", failed),
+        ("после сбоя на месте прежний текст", kept),
+        ("и обрубок под временным именем убран", swept),
+    ]
+    print("\nатомарная запись:")
+    bad = 0
+    for name, ok in checks:
+        bad += not ok
+        print(f"  [{'ok ' if ok else 'FAIL'}] {name}")
+    return bad
+
+
+def tools_suite():
+    """Каждый скрипт из tools/ запускается из чужой папки.
+
+    Эти обёртки раньше жили в /tmp с зашитыми путями и ломались при
+    переносе. Проверяется главное их свойство: импорт модулей корня
+    работает откуда угодно, и справка печатается без ошибок.
+    """
+    import pathlib
+    import subprocess
+    import tempfile
+
+    tools = sorted((pathlib.Path(__file__).parent / "tools").glob("[a-z]*.py"))
+    print("\nскрипты tools/:")
+    bad = 0 if tools else 1
+    with tempfile.TemporaryDirectory() as elsewhere:
+        for script in tools:
+            r = subprocess.run([sys.executable, str(script), "-h"],
+                               cwd=elsewhere, capture_output=True, text=True)
+            ok = r.returncode == 0 and "usage:" in r.stdout
+            bad += not ok
+            print(f"  [{'ok ' if ok else 'FAIL'}] {script.name} запускается "
+                  f"из другой папки")
+    return bad
+
+
 def pagelist_suite():
     """Подтверждённая страница обязана стоять в списке страниц и жирным.
 
@@ -1284,7 +1352,6 @@ def boxes_suite():
 
 
 def tess_suite():
-    import json
     import pathlib
     import shutil
     import subprocess
@@ -1365,6 +1432,22 @@ def tess_suite():
         measured.clear()
         quality.measure(scans, "6", d, 2, remeasure=True)
         remeasured = sorted(measured)
+        # команда целиком: итог замера должен лечь в quality.json
+        import contextlib
+        import io
+        tess.recognize = measure_fake
+        docstore.save_meta("bv0000903", pages=3, title="Том")
+        old_argv = sys.argv
+        sys.argv = ["quality.py", "bv0000903"]
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                quality.main()
+        finally:
+            sys.argv = old_argv
+        saved = json.loads((d / "quality.json").read_text(encoding="utf-8"))
+        saved_ok = (saved["weak"] == [2, 3] and saved["pages"]["1"] == 71.5
+                    and not (d / "quality.json.part").exists())
+
         tess.recognize = boom
         try:
             quality.measure(scans, "6", d, 2, remeasure=True)
@@ -1416,6 +1499,7 @@ def tess_suite():
          and [x[0] for x in stats] == [1, 2, 3]),
         ("--remeasure распознаёт всё заново",
          remeasured == ["p0001.jpg", "p0002.jpg", "p0003.jpg"]),
+        ("quality.py записывает итог замера в quality.json", saved_ok),
         ("сбой замера не пишет частичный итог", exited),
     ]
     if real is None:
@@ -1540,7 +1624,6 @@ def parse_ok(result):
 
 
 def stripes_suite():
-    import json
     import pathlib
     import tempfile
     from types import SimpleNamespace

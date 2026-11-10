@@ -10,7 +10,7 @@ API вьюера, найденный в его же JS (объект RouteConsta
 Возобновляемо: уже лежащие файлы пропускаются.
 """
 
-import argparse, http.client, json, socket, sys, threading, time
+import argparse, http.client, json, pathlib, socket, sys, threading, time
 import urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -100,11 +100,11 @@ def get(url, referer, retries=5, timeout=30, deadline=60):
         except (OSError, http.client.HTTPException) as e:
             # OSError — URLError, ConnectionResetError, таймауты. Обрыв тела
             # ответа на середине приходит как IncompleteRead, а он не OSError:
-            # 14 дек. 2026 г. так упал весь прогон pn0001286 без единого повтора.
-            if stalled.is_set():
-                e = Stalled(f"нет ответа за {deadline} с")
+            # 4 ноября 2026 г. так упал весь прогон pn0001286 без единого повтора.
             if attempt == retries - 1:
-                raise e
+                if stalled.is_set():
+                    raise Stalled(f"нет ответа за {deadline} с") from e
+                raise
             time.sleep(min(2 ** attempt, 15))   # библиотека маленькая, не давим
         finally:
             guard.cancel()
@@ -115,14 +115,13 @@ def page_count(base):
     return len(json.loads(get(f"{base}/page/sizes", f"{base}/view/")))
 
 
-def ensure_page(ident: str, n: int) -> "pathlib.Path":
+def ensure_page(ident: str, n: int) -> pathlib.Path:
     """Вернуть скан страницы, дотянув его, если он был выброшен.
 
     Благодаря этому сканы можно считать кэшем, а не данными: любой
     инструмент, которому нужна картинка, получит её независимо от того,
     чистили каталог или нет.
     """
-    import pathlib
     meta = load_meta(ident)
     dst = doc_dir(ident) / "scans" / f"p{n:04d}.jpg"
     if dst.exists() and dst.stat().st_size > 1024:

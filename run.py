@@ -20,12 +20,11 @@ import argparse
 import json
 import subprocess
 import sys
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 import catalog
-from docstore import doc_dir, doc_id, load_meta, read_log
+from docstore import ROOT, doc_dir, doc_id, load_meta, read_log
 
 
 class StepFailed(Exception):
@@ -41,8 +40,10 @@ def step(title, cmd, capture=False):
     if not capture:
         print(f"\n=== {title} ===", flush=True)
     t = time.monotonic()
-    r = subprocess.run([sys.executable, *cmd], capture_output=capture,
-                       text=capture)
+    # Скрипт шага — по пути от корня проекта, а не от текущей папки:
+    # запуск `run.py` из другого места иначе падал на первом же шаге.
+    r = subprocess.run([sys.executable, str(ROOT / cmd[0]), *cmd[1:]],
+                       capture_output=capture, text=capture)
     if r.returncode:
         tail = ""
         if capture:

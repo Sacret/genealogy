@@ -17,7 +17,6 @@
 
 import argparse
 import re
-import shutil
 import subprocess
 import sys
 
@@ -176,7 +175,7 @@ def sync_gitignore() -> list:
     # повторный прогон иначе растил бы файл вниз на одну строку за раз.
     tidy = [ln for i, ln in enumerate(out)
             if ln.strip() or (i and out[i - 1].strip())]
-    GITIGNORE.write_text("\n".join(tidy).rstrip("\n") + "\n", encoding="utf-8")
+    docstore.write_atomic(GITIGNORE, "\n".join(tidy).rstrip("\n") + "\n")
     return [p for p in pages if p not in notes]
 
 
@@ -236,8 +235,8 @@ def main():
     for surname, page in confirmed_hits(a.ident):
         if not list((d / "crops").glob(f"p{page:04d}_*")):
             print(f"  вырезаю подтверждение: стр. {page}, {surname}")
-            subprocess.run([sys.executable, "crop.py", a.ident, str(page),
-                            surname, "--line", "260"], check=False)
+            subprocess.run([sys.executable, str(ROOT / "crop.py"), a.ident,
+                            str(page), surname, "--line", "260"], check=False)
 
     for f in doomed:
         f.unlink()

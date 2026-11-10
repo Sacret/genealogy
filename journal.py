@@ -2328,14 +2328,14 @@ def rebuild() -> pathlib.Path:
         # Не переписывать неизменившийся файл: иначе git видел бы правку
         # каждого года после каждого поиска, хотя менялся один.
         if not path.exists() or path.read_text(encoding="utf-8") != js:
-            path.write_text(js, encoding="utf-8")
+            docstore.write_atomic(path, js)
     # Год, из которого пустые дела ушли (нашлось что-то, сменился год в
     # заголовке), оставил бы файл, на который страница уже не ссылается.
     for stale in folder.glob("nils-*.js"):
         if stale.name not in chunks:
             stale.unlink()
     dst = ROOT / "journal.html"
-    dst.write_text(page, encoding="utf-8")
+    docstore.write_atomic(dst, page)
     return dst
 
 

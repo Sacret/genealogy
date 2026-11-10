@@ -44,6 +44,25 @@ def allow_big_scans() -> None:
     Image.MAX_IMAGE_PIXELS = BIG_SCAN_PIXELS
 
 
+def write_atomic(path, text: str) -> None:
+    """Записать файл целиком или не тронуть его вовсе.
+
+    `write_text` сначала обрезает файл до нуля, потом пишет: процесс,
+    прерванный между этими шагами (Ctrl-C посреди пачки, кончилось место
+    на диске), оставляет пустой или обрубленный `meta.json`, а с ним том
+    перестаёт быть томом. Текст пишется рядом под временным именем и
+    встаёт на место одним переименованием — оно атомарно.
+    """
+    path = pathlib.Path(path)
+    tmp = path.with_name(path.name + ".part")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(path)
+    except BaseException:       # и Ctrl-C тоже: обрубок под ногами не нужен
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def doc_base(base_url: str) -> str:
     """URL документа без хвоста вьюера: .../bv0000410/view/ → .../bv0000410.
 
@@ -168,8 +187,8 @@ def save_meta(ident: str, **fields) -> dict:
     d.mkdir(parents=True, exist_ok=True)
     meta = load_meta(ident)
     meta.update(fields)
-    (d / "meta.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_atomic(d / "meta.json",
+                 json.dumps(meta, ensure_ascii=False, indent=2))
     return meta
 
 

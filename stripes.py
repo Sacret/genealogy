@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import tess
-from docstore import allow_big_scans, doc_dir, load_meta
+from docstore import allow_big_scans, doc_dir, load_meta, write_atomic
 
 MARKER = "stripes.json"
 WORD = re.compile(r"[^\W\d_]+")
@@ -84,8 +84,7 @@ def write_marker(ident, lang):
               "geometry": "лента в 1/5 ширины листа, шаг 1/10, psm 6",
               "date": datetime.now(timezone.utc).astimezone()
                               .isoformat(timespec="seconds")}
-    (d / MARKER).write_text(json.dumps(marker, ensure_ascii=False, indent=1),
-                            encoding="utf-8")
+    write_atomic(d / MARKER, json.dumps(marker, ensure_ascii=False, indent=1))
     return marker
 
 

@@ -19,7 +19,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import tess
-from docstore import doc_dir, load_meta
+from docstore import doc_dir, load_meta, write_atomic
 from ocr_pages import load_stats
 
 THRESHOLD = 60.0          # ниже — странице верить нельзя
@@ -124,11 +124,10 @@ def main():
         print("   ", ", ".join(str(p) for p, _ in weak[:40]),
               "…" if len(weak) > 40 else "")
 
-    (d / "quality.json").write_text(json.dumps(
+    write_atomic(d / "quality.json", json.dumps(
         {"threshold": a.threshold, "psm": a.psm,
          "pages": {str(p): round(c, 1) for p, c, _ in stats},
-         "weak": [p for p, _ in weak]}, ensure_ascii=False, indent=1),
-        encoding="utf-8")
+         "weak": [p for p, _ in weak]}, ensure_ascii=False, indent=1))
     print(f"  записано: {d/'quality.json'}")
 
 

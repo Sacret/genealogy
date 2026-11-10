@@ -31,7 +31,22 @@ jobs:
         run: python audit.py
 
       - name: Проверить синтаксис
-        run: python -m compileall -q *.py surnamefind
+        run: python -m compileall -q *.py surnamefind tools
+
+      - name: Проверить код линтером
+        run: pipx run ruff check .
 
       - name: Запустить тесты
         run: python tests.py
+
+      # journal.html и documents.json — производные файлы, но лежат в
+      # репозитории: первый публикуется как есть, по второму берётся очередь.
+      # Обе сборки не ходят в сеть и на чистой копии дают те же байты, так что
+      # любое расхождение значит одно: данные поправили, а пересборку не
+      # закоммитили (или поправили руками сам производный файл).
+      - name: Проверить, что журнал и каталог собраны из текущих данных
+        run: |
+          python journal.py
+          python catalog.py --rebuild > /dev/null
+          git diff --exit-code --stat -- journal.html journal documents.json
+          test -z "$(git status --porcelain -- journal)"

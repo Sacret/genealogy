@@ -13,7 +13,7 @@ import re
 import sys
 from pathlib import Path
 
-from docstore import ROOT, documents, load_meta, persons
+from docstore import ROOT, documents, load_meta, persons, write_atomic
 
 
 REGISTRY = ROOT / "namesakes.json"
@@ -37,10 +37,7 @@ def read_registry(path=REGISTRY):
 
 
 def write_registry(data, path=REGISTRY):
-    Path(path).write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    write_atomic(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
 
 
 def _valid_page(value):

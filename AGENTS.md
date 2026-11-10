@@ -22,8 +22,10 @@
 ```
 
 Звать скрипты через `.venv/bin/python`. CI (`.github/workflows/checks.yml`)
-гоняет `doctor.py`, `audit.py`, `compileall` и `tests.py` — после правок кода
-или данных прогнать `audit.py` и `tests.py` локально.
+гоняет `doctor.py`, `audit.py`, `compileall`, `ruff check .` и `tests.py` — после
+правок кода или данных прогнать `audit.py` и `tests.py` локально. Ещё CI
+пересобирает журнал и каталог (`journal.py`, `catalog.py --rebuild`) и падает,
+если `journal.html`, `journal/` или `documents.json` в коммите отстали от данных.
 
 Машина — macOS: `sed -i` без суффикса не работает (файлы править через
 Python или Edit), а в zsh `set -- $строка` и `for p in "1 2"` не делят строку на
@@ -82,6 +84,19 @@ Python или Edit), а в zsh `set -- $строка` и `for p in "1 2"` не �
 только полосы с оценкой ниже 60) и сплошной проход `stripes.py <id>` —
 кандидаты собираются по всем слоям. Подробности — в разделе «Газеты»
 `README.md`.
+
+Для пачки выпусков всё это собрано в `tools/` — свои обёртки во временной
+папке не писать, а нужное новое класть туда же:
+
+```bash
+.venv/bin/python tools/chain.py --next 6            # run + rescue всех полос + --cols + stripes
+.venv/bin/python tools/words.py <id>                # слова на «Кар», «Мог», «Кочет», «Ровен»
+.venv/bin/python tools/findword.py <id> <стр> <regex>   # слово на скане и вырезка
+.venv/bin/python tools/cut.py <id> <стр> x0 y0 x1 y1 <файл>   # вырезка по долям листа
+.venv/bin/python tools/thumbs.py <id> --out <папка>     # уменьшенные листы
+.venv/bin/python tools/verdicts.py <заметки.py> [--write]   # вердикты absent/unclear из заметок
+.venv/bin/python tools/stage.py <id>... [--also places.json]   # индекс git перед коммитом
+```
 
 Каждый кандидат проверяется по скану (вырезка или страница), а не по тексту
 OCR. Сырое число кандидатов — не результат.

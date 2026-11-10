@@ -32,7 +32,7 @@
 
 import argparse, json, pathlib, sys
 
-from docstore import allow_big_scans, doc_dir, documents
+from docstore import allow_big_scans, doc_dir, documents, write_atomic
 
 NAME = "boxes.json"
 
@@ -64,8 +64,7 @@ def save(ident: str, data: dict) -> pathlib.Path:
     d = path(ident)
     d.parent.mkdir(parents=True, exist_ok=True)
     live = {k: v for k, v in sorted(data.items()) if (d.parent / k).exists()}
-    d.write_text(json.dumps(live, ensure_ascii=False, indent=1) + "\n",
-                 encoding="utf-8")
+    write_atomic(d, json.dumps(live, ensure_ascii=False, indent=1) + "\n")
     return d
 
 

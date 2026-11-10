@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from docstore import (LIBRARIES, ROOT, UA, latest_verdicts, library_of,
-                      load_meta, meta_year)
+                      load_meta, meta_year, write_atomic)
 
 CATALOG = ROOT / "catalog.jsonl"
 DOCUMENTS = ROOT / "documents.json"
@@ -1238,8 +1238,8 @@ def with_counts(section: dict) -> dict:
 
 
 def write(out: dict) -> str:
-    DOCUMENTS.write_text(json.dumps(with_counts(out), ensure_ascii=False,
-                                    indent=2) + "\n", encoding="utf-8")
+    write_atomic(DOCUMENTS, json.dumps(with_counts(out),
+                                       ensure_ascii=False, indent=2) + "\n")
     return DOCUMENTS.name
 
 

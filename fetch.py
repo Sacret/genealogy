@@ -10,7 +10,7 @@ API вьюера, найденный в его же JS (объект RouteConsta
 Возобновляемо: уже лежащие файлы пропускаются.
 """
 
-import argparse, http.client, json, pathlib, socket, sys, threading, time
+import argparse, http.client, json, os, pathlib, socket, sys, threading, time
 import urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -62,7 +62,13 @@ def _watchdog(conn, deadline, stalled):
     return t
 
 
-def get(url, referer, retries=5, timeout=30, deadline=60):
+# Сервер библиотеки временами отвечает по 40-60 с на каждый лист (12 ноября
+# 2026 г. так шло больше получаса) — тогда таймаут поднимается переменной
+# VIVALDI_TIMEOUT, сторож обрыва берёт вдвое больше.
+TIMEOUT = int(os.environ.get("VIVALDI_TIMEOUT", "30"))
+
+
+def get(url, referer, retries=5, timeout=TIMEOUT, deadline=2 * TIMEOUT):
     """Скачать с повторами.
 
     Ловим OSError целиком, а не URLError: сброс соединения приходит

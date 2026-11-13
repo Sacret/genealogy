@@ -8,6 +8,10 @@
 `.gitignore` и кладёт в индекс git ровно то, что относится к названным
 томам: их папки (сканы и слои, закрытые `.gitignore`, git не возьмёт сам),
 `documents.json`, `catalog.jsonl`, `journal.html`, `journal/`, `.gitignore`.
+Тома, которых нет в git и которые не названы (их ещё качает
+параллельная цепочка), при пересборке считаются несуществующими: CI
+собирает журнал и каталог на чистой копии, без них, и иначе падает.
+
 Общие реестры (`places.json`, `requests.md`, `persons.json`, `events.jsonl`,
 `namesakes.json`) добавляются только по `--also`: в них может лежать чужая
 незаконченная правка.
@@ -39,6 +43,29 @@ def git(*args):
                           capture_output=True)
 
 
+def hide_untracked(keep):
+    """Спрятать от catalog и journal тома вне git, кроме названных."""
+    tracked = set(git("ls-files", "--", f"{docstore.VOL}/").stdout.split())
+    hidden = {i for i in docstore.documents() if i not in keep
+              and f"{docstore.doc_rel(i)}/meta.json" not in tracked}
+    if not hidden:
+        return
+    print("пересобираю без томов вне git: " + ", ".join(sorted(hidden)))
+    real_dir, real_docs = docstore.doc_dir, docstore.documents
+
+    def doc_dir(ident):
+        path = real_dir(ident)
+        return path.with_name(f".скрыт-{ident}") if ident in hidden else path
+
+    def documents():
+        return [i for i in real_docs() if i not in hidden]
+
+    for mod in (docstore, catalog, journal):
+        for name, fake in (("doc_dir", doc_dir), ("documents", documents)):
+            if hasattr(mod, name):
+                setattr(mod, name, fake)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("idents", nargs="+")
@@ -58,6 +85,7 @@ def main():
     if problems:
         sys.exit("коммит готовить рано:\n  " + "\n  ".join(problems))
 
+    hide_untracked(set(a.idents))
     catalog.refresh()
     journal.rebuild()
     prune.sync_gitignore()

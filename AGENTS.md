@@ -96,7 +96,12 @@ Python или Edit), а в zsh `set -- $строка` и `for p in "1 2"` не �
 .venv/bin/python tools/thumbs.py <id> --out <папка>     # уменьшенные листы
 .venv/bin/python tools/verdicts.py <заметки.py> [--write]   # вердикты absent/unclear из заметок
 .venv/bin/python tools/stage.py <id>... [--also places.json]   # индекс git перед коммитом
+.venv/bin/python tools/rebuild_committed.py <id>...   # журнал и каталог без томов, что ещё качаются
 ```
+
+Пока вторая цепочка качает следующие выпуски, их тома попадают в
+`documents.json` («в работе») и в журнал, а CI на чистой копии их не видит и
+падает. Перед коммитом пары — `rebuild_committed.py` с этими томами.
 
 Каждый кандидат проверяется по скану (вырезка или страница), а не по тексту
 OCR. Сырое число кандидатов — не результат.

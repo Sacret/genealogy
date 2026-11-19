@@ -742,8 +742,24 @@ def persons_suite():
     if "class=person" in plain:
         bad += 1
         print("  [FAIL] однофамилец подписан именем родственника")
+    # Второй участник события (жена-совладелица в тех же торгах) получает
+    # ссылку рядом с первым: --person держит одного человека на страницу.
+    import journal
+    saved = journal.co_participants
+    journal.co_participants = lambda: {("bv0000035", "254", "i0026"): ["i0209"]}
+    try:
+        pair = _doc(1913, "found", kin=["254"])
+        pair["rows"][0]["persons"] = {"254": "i0026"}
+        summary = render({"bv0000035": pair}).partition("</summary>")[0]
+    finally:
+        journal.co_participants = saved
+    for want in ("persons/i0026/", "persons/i0209/"):
+        if want not in summary:
+            bad += 1
+            print(f"  [FAIL] в сводке нет {want!r}")
     if not bad:
         print("  [ok ] ссылка на родословную — в сводке, и только там")
+        print("  [ok ] второй участник события — рядом с первым")
     return bad
 
 

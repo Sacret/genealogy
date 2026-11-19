@@ -8,6 +8,7 @@ HTML здесь — представление, а не хранилище. Ис
 """
 
 import base64
+import functools
 import hashlib
 import html
 import json
@@ -17,6 +18,7 @@ from collections import OrderedDict
 
 import boxes
 import docstore
+import events
 from docstore import (ROOT, documents, latest_verdicts, load_meta,
                       meta_year, persons as roster, read_log)
 
@@ -1486,7 +1488,7 @@ def row_badge(r):
     return (KIN_LABEL, "ok") if kin else (MAYBE_LABEL, "maybe")
 
 
-def kin_people(r):
+def kin_people(r, ident=None):
     """Кто найден: записи реестра для страниц с подтверждённым родством.
 
     Порядок — по номеру страницы, повторы убраны: один человек, найденный
@@ -1502,6 +1504,24 @@ def kin_people(r):
         pid = by_page.get(page)
         if pid in known:
             out[pid] = known[pid]
+        # Второй участник того же события (жена-совладелица в одних торгах)
+        # назван в вердикте, но флаг --person держит одного человека на
+        # страницу — без этого его страница в родословной осталась бы
+        # без ссылки.
+        for other in co_participants().get((ident, page, pid), ()):
+            if other in known:
+                out.setdefault(other, known[other])
+    return out
+
+
+@functools.lru_cache(maxsize=1)
+def co_participants():
+    """{(документ, страница, человек): [другие участники]} из events.jsonl."""
+    out = {}
+    for ev in events.read_events():
+        if ev.get("others") and ev.get("document"):
+            key = (ev["document"], str(ev.get("page")), ev.get("person"))
+            out.setdefault(key, []).extend(ev["others"])
     return out
 
 
@@ -1511,8 +1531,8 @@ def person_link(pid, who):
             f"title='{e(title)}'>{e(who.get('имя', pid))}</a>")
 
 
-def person_links(r):
-    return "".join(person_link(pid, who) for pid, who in kin_people(r).items())
+def person_links(r, ident=None):
+    return "".join(person_link(pid, who) for pid, who in kin_people(r, ident).items())
 
 
 def crops_for(ident, surname, pages):
@@ -2153,7 +2173,7 @@ def build(docs) -> tuple:
             label, cls = row_badge(r)
             chips.append(f"<span class='badge {cls} sum-badge'>"
                          f"{e(r['surname'])} — {label}</span>"
-                         + person_links(r))
+                         + person_links(r, ident))
         word = plural(len(rows), "поиск", "поиска", "поисков")
         out.append("<details class=searches><summary>" + "".join(chips)
                    + f"<span class=sum-count>{len(rows)} {word}</span></summary>")

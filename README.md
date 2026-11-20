@@ -526,6 +526,7 @@ python3 tools/words.py pn0030634                   # слова на «Кар»,
 python3 tools/thumbs.py pn0030634 --out ПАПКА      # уменьшенные листы: вёрстка, заголовки
 python3 tools/findword.py pn0030634 4 'Кармаз'     # слово на скане и вырезка вокруг
 python3 tools/cut.py pn0030634 4 0.19 0.30 0.38 0.36 кусок.png   # вырезка по долям листа
+python3 tools/loose.py pn0030634                   # кандидаты --loose, объединённые по сидам хэша
 python3 tools/verdicts.py заметки.py               # тексты вердиктов; --write — записать
 python3 tools/stage.py pn0030634 pn0030633         # пересборка и индекс git перед коммитом
 ```

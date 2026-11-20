@@ -95,6 +95,7 @@ Python или Edit), а в zsh `set -- $строка` и `for p in "1 2"` не �
 .venv/bin/python tools/cut.py <id> <стр> x0 y0 x1 y1 <файл>   # вырезка по долям листа
 .venv/bin/python tools/thumbs.py <id> --out <папка>     # уменьшенные листы
 .venv/bin/python tools/verdicts.py <заметки.py> [--write]   # вердикты absent/unclear из заметок
+.venv/bin/python tools/loose.py <id>                # кандидаты --loose по нескольким сидам хэша
 .venv/bin/python tools/stage.py <id>... [--also places.json]   # индекс git перед коммитом
 ```
 

@@ -13,6 +13,7 @@
 
 import html as html_lib
 import json
+import os
 import pathlib
 import re
 import urllib.request
@@ -128,7 +129,11 @@ def fetch_title(base_url: str) -> str:
     """
     req = urllib.request.Request(f"{base_url.rstrip('/')}/view/",
                                  headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=60) as r:
+    # Вьюер в медленные дни отвечает те же 50-60 с, что и лист (21 ноября
+    # 2026 г. — 53-59 с), и жёсткие 60 с роняли весь run.py: таймаут
+    # поднимается вместе с VIVALDI_TIMEOUT из fetch.py.
+    timeout = max(60, int(os.environ.get("VIVALDI_TIMEOUT", "30")))
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         html = r.read().decode("utf-8", "replace")
     m = re.search(r'<app-root[^>]*\bdata-title="([^"]*)"', html)
     if m:
